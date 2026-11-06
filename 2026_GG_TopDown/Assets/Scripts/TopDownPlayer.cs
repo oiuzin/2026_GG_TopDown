@@ -15,6 +15,8 @@ public class TopDownPlayer : MonoBehaviour
     private Sprite[] currentSprites;
     private int frameIndex = 0;
     private float frameTimer = 0f;
+    public DialogueBox dialogueBox;
+
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -27,6 +29,8 @@ public class TopDownPlayer : MonoBehaviour
     }
     void Update()
     {
+        if (dialogueBox.isOpen) { moveInput = Vector2.zero; }   // Update 첫 줄에 추가
+        rb.linearVelocity = moveInput * moveSpeed;
         rb.linearVelocity = moveInput * moveSpeed;
         if (facingDir.y > 0) { currentSprites = upSprites; }
         else if (facingDir.y < 0) { currentSprites = downSprites; }
