@@ -13256,10 +13256,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cac4a527904878429512116667df151, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
-  moveSpeed: 2
+  moveSpeed: 1
   chaseRange: 5
   player: {fileID: 921980395}
   dialogueBox: {fileID: 1522584893}
+  downSprites:
+  - {fileID: -3767911791555838559, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -5570002244730919020, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 994208209455328628, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  upSprites:
+  - {fileID: 725754152337015569, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 5056331392613203703, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 4853877773632043715, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  leftSprites:
+  - {fileID: -855825237, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -1286489749, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -1621037429, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  rightSprites:
+  - {fileID: -1636078839, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 808959055, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -781682807, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  frameTime: 0.15
 --- !u!58 &1083289702
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -13308,7 +13325,7 @@ Rigidbody2D:
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
-  m_Mass: 1
+  m_Mass: 2
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_GravityScale: 0
@@ -19823,10 +19840,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cac4a527904878429512116667df151, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
-  moveSpeed: 2
+  moveSpeed: 1
   chaseRange: 5
   player: {fileID: 921980395}
   dialogueBox: {fileID: 1522584893}
+  downSprites:
+  - {fileID: -3767911791555838559, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -5570002244730919020, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 994208209455328628, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  upSprites:
+  - {fileID: 725754152337015569, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 5056331392613203703, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 4853877773632043715, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  leftSprites:
+  - {fileID: -855825237, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -1286489749, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -1621037429, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  rightSprites:
+  - {fileID: -1636078839, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: 808959055, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  - {fileID: -781682807, guid: dcdbae6bf07c2444db307a16d19476a0, type: 3}
+  frameTime: 0.15
 --- !u!58 &1617902951
 CircleCollider2D:
   m_ObjectHideFlags: 0
@@ -19875,7 +19909,7 @@ Rigidbody2D:
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
-  m_Mass: 1
+  m_Mass: 2
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_GravityScale: 0
