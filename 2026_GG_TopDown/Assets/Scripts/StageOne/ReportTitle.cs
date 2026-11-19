@@ -7,14 +7,12 @@ using UnityEngine.UI;
 public sealed class ReportTitle : MonoBehaviour
 {
     [SerializeField] private Font interfaceFont;
+    [SerializeField] private SpriteRenderer editorPreview;
+
     private void Start()
     {
         AudioListener.volume = PlayerPrefs.GetFloat("ReportVolume", 1);
-        var cameraObject = new GameObject("Title Camera", typeof(Camera), typeof(AudioListener));
-        var camera = cameraObject.GetComponent<Camera>();
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = Color.black;
-        camera.cullingMask = 0;
+        editorPreview.enabled = false;
         var events = new GameObject("Event System", typeof(EventSystem), typeof(InputSystemUIInputModule));
         var screen = new ReportUI(transform, interfaceFont).Root;
         var ink = new Color32(8, 30, 39, 255);
