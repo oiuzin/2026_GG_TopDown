@@ -13,7 +13,7 @@ public sealed class ReportStageOne : MonoBehaviour
 {
     [SerializeField] private Font interfaceFont;
     [SerializeField] private Material spriteMaterial;
-    public const string CheckpointKey = "AnomalyReport.StageOne.ResearchChase";
+    public const string CheckpointKey = "AnomalyReport.StageOne.RecordChase";
     private enum Phase { Survey, Report, Verify, Chase, Finished }
 
     private const float CrewPixelsPerUnit = 80f;
@@ -56,7 +56,7 @@ public sealed class ReportStageOne : MonoBehaviour
     private int playerDirection, enemyDirection;
     private float enemyGrace, lungeCooldown, lungeWindup, lungeRemaining;
     private bool locked;
-    private bool testedFive, testedSix, usedHatch;
+    private bool usedHatch;
 
     private sealed class Spot
     {
@@ -95,7 +95,7 @@ public sealed class ReportStageOne : MonoBehaviour
         Follow(1);
         ShowObjective(player.transform.position);
         Speak(null, "D|아, 드디어 일어났네. 너 없으면 오늘도 내가 일 다 할 뻔했잖아.",
-            "R|이상하다. 어제는 내가 다 했던 것 같은데.",
+            "R|어제는 우리 여섯이 끝냈잖아. 오늘도 늘 하던 대로 하면 돼.",
             "A|아까 복도에서 무거운 걸 끌고 가는 소리가 났어요.",
             "C|우선 시설 상태부터 확인합니다. R 씨, 분석실 기록을 맡아 주십시오.",
             "T|어젯밤부터 전력 숫자가 이상하던데요. 이번에도 제가 확인하는 거죠?",
@@ -130,26 +130,26 @@ public sealed class ReportStageOne : MonoBehaviour
             "…바람 소리요? 익숙해져서 못 느꼈나 보네요.");
 
         Inspect("공동 사진", 21, 3, "여섯 명이 찍힌 사진이다. 찍은 사람은 기억나지 않는다.",
-            "사진 앞에는 여섯 명. 뒷면에 적힌 이름표는 다섯 개다.", true, "team_photo_board");
+            "늘 같이 찍던 자리다. 어제는 이 사진이 책상 위에 있었는데.", documentArt: "team_photo_board");
         Inspect("공동 머그잔", 14, 6, "잔은 여섯 개. 손잡이마다 작은 흠집이 있다.",
-            "빈 자리에 둥근 물자국이 남아 있다. 자국은 여섯 개다.", documentArt: "enamel_mugs");
+            "늘 쓰는 잔 여섯 개가 그대로다. 물만 식었다.", documentArt: "enamel_mugs");
         Inspect("커피 주전자", 10, 6, "아직 따뜻하다. D가 아까부터 이것만 찾았다.",
             "방금 따른 것처럼 보이는데 주전자가 차갑다.", documentArt: "coffee_kettle");
         Inspect("작업 배치표", 29, 3, "내 이름 옆에 ‘분석실 확인’이 적혀 있다.",
-            "칸은 여섯 개. 마지막 칸에만 인쇄가 번져 있다.");
+            "오늘 야간 점검은 취소됐다고 했는데, 복도 점검 칸에 완료 표시가 있다.");
         Inspect("연구실 창문", 31, 2, "눈 때문에 맞은편 건물도 잘 보이지 않는다.",
             "유리 위 손자국이 안쪽을 향해 번져 있다.");
         Inspect("개인 메모", 19, 6, "메모에 「오늘도 같은 꿈」이라고 쓰여 있다.",
             "내 필체와 비슷하다. 쓴 기억은 없다.");
         Inspect("복도 긁힌 자국", 24, 12, "무거운 물건을 끌고 간 흔적이다.");
         Inspect("복도 비상등", 14, 9, "주전원이 꺼져도 이 불은 남는다.");
-        Inspect("전력 로그", 18, 19, "사용자 표기가 빠진 기록이 세 건 있다.",
-            "사용 기록은 다섯 줄인데 작업대 여섯 곳에 전력이 들어갔다.", documentArt: "power_log_terminal");
-        Inspect("종이 점검표", 22, 19, "수기로 날짜와 인원을 적는 점검표다.",
-            "인원 칸의 6 위에 5가 덧써 있다.");
-        Inspect("공식 편성 명부", 23, 19, "현장 보고 전에 교신 채널을 열어야 열람할 수 있다.",
-            "공식 편성 다섯 명. 이 기록만으로 사진 속 누가 빠졌는지는 단정할 수 없다.",
-            true, verifiedArt: "official_roster_R_D_A_C_T");
+        Inspect("전력 로그", 18, 19, "새벽에 잠깐 전원이 끊겼다. 상세 기록은 무전 후 열어 볼 수 있다.",
+            "03:12에 주전원을 차단했다. 그 뒤에도 복도 쪽 감지기는 계속 반응했다.", true, "power_log_terminal");
+        Inspect("종이 점검표", 22, 19, "수기로 날짜와 설비 상태를 적는 점검표다.",
+            "어제 점검자는 복도에서 끌리는 소리를 들었다고 적었다. 오늘 A가 들은 것과 같다.");
+        Inspect("복도 출입 기록", 23, 19, "복도 출입 기록이다. 사진을 확인한 뒤 원본 기록들을 대조하자.",
+            "03:12. 양쪽 셔터는 닫혀 있었다. 그런데 연구동 안쪽의 잠금실 문이 안에서 열렸다.",
+            true, "door_access_log");
         Inspect("잠금실 출입문", 27, 13, "외부 잠금 스위치가 있다. 안쪽에는 점검용 비상구가 보인다.");
 
         AddSpot("발전기 손상 사진", 9, 19, () =>
@@ -166,10 +166,10 @@ public sealed class ReportStageOne : MonoBehaviour
         }, () => phase <= Phase.Verify);
 
         AddSpot("본부 무전기", 13, 19, Radio, () => phase <= Phase.Verify);
-        AddSpot("인원 보고 단말", 15, 16, () =>
+        AddSpot("보안 단말", 15, 16, () =>
         {
             if (phase == Phase.Verify) OpenChoices();
-            else Speak(null, "R|현장 인원과 이상 징후를 입력하는 단말이다.");
+            else Speak(null, "R|복도 CCTV 원본을 열 수 있는 보안 단말이다.");
         }, () => phase <= Phase.Verify);
         AddSpot("본관동 연결 통로", 1, 11, () => Speak(null, "R|셔터가 내려가 있다. 통행 승인이 필요하다."),
             () => phase <= Phase.Verify);
@@ -199,9 +199,9 @@ public sealed class ReportStageOne : MonoBehaviour
             if (firstTalk) Speak(null, code + "|" + first, code + "|" + second);
             else Speak(null, code + "|" + (phase == Phase.Verify ? code switch
             {
-                "C" => "구두 보고는 보류하십시오. 사진과 원본 명부는 따로 남깁니다.",
+                "C" => "구두 보고는 보류하십시오. 전력 로그와 출입 기록을 따로 남깁니다.",
                 "T" => "화면에 뜬 것만 믿긴 어렵죠. 종이 기록부터 대조해 보세요.",
-                "E" => "사진 찍은 분이 누군지는 기억나요? …전 잘 모르겠네요.",
+                "E" => "복도 쪽은 아직 안 봤어요? …같이 가 드릴까요.",
                 "A" => "무전 끝나고도 잡음이 좀 오래 남았어요. 듣고 있었던 것처럼요.",
                 _ => "사진은 분명 우리가 찍은 건데. 그날 뭐 했는지는 잘 안 떠오르네."
             } : second));
@@ -209,7 +209,7 @@ public sealed class ReportStageOne : MonoBehaviour
     }
 
     private void Inspect(string name, int x, int y, string first, string revised = null,
-        bool verification = false, string documentArt = null, string verifiedArt = null)
+        bool verification = false, string documentArt = null)
     {
         AddSpot(name, x, y, () =>
         {
@@ -217,8 +217,7 @@ public sealed class ReportStageOne : MonoBehaviour
             {
                 if (verification) evidence.Add(name);
                 Speak(CheckEvidence, "R|" + revised);
-                string art = verifiedArt ?? documentArt;
-                if (art != null) ShowDocument(art);
+                if (documentArt != null) ShowDocument(documentArt);
             }
             else
             {
@@ -245,7 +244,7 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         if (phase != Phase.Report)
         {
-            Speak(null, phase == Phase.Verify ? "R|채널이 닫혔다. 사진과 편성 기록을 직접 맞춰 보자."
+            Speak(null, phase == Phase.Verify ? "R|채널이 닫혔다. 전력 로그와 출입 기록을 맞춰 봐야겠다."
                 : "R|발전기 상태부터 확인해야 보고할 수 있겠다.");
             return;
         }
@@ -254,36 +253,36 @@ public sealed class ReportStageOne : MonoBehaviour
         Speak(null, "본부|연구동, 수신했습니다. 손상 사진을 보존하고 외부 이동을 중단하십시오.",
             "C|확인했습니다. 손상 범위와 현장 상태를 정리해서 전송하겠습니다.",
             "본부|현장 상태는 단말의 점검 양식에 입력하십시오. 지원 요청은 접수됐습니다.",
-            "R|양식이 열렸다. 사진과 공식 명부부터 맞춰 보는 게 좋겠다.");
+            "R|기록 보존 권한이 열렸다. 손상 사진이 찍힌 시간부터 맞춰 보자.");
     }
 
     private void OpenChoices()
     {
         choosing = true;
-        Present("인원 보고 단말", "현장 인원을 선택해 전송하세요.");
-        advance.text = "숫자 5 / 6 또는 버튼";
+        Present("보안 단말", "복도 CCTV 원본을 열거나 본부에 상태를 재전송할 수 있습니다.");
+        advance.text = "숫자 1 / 2 또는 버튼";
         choices.gameObject.SetActive(true);
         choices.GetComponentInChildren<Button>().Select();
     }
 
-    private void SendReport(bool six)
+    private void HandleSecurityTerminal(bool openArchive)
     {
         if (!choosing) return;
         choosing = false;
         choices.gameObject.SetActive(false);
         EventSystem.current.SetSelectedGameObject(null);
-        if (six) testedSix = true;
-        else testedFive = true;
-        if (testedFive && testedSix) evidence.Add("인원 보고 오류");
 
-        if (six)
-            Speak(CheckEvidence, "시스템|06 — 형식 검증 실패. 보고서는 전송되지 않았습니다.",
-                testedFive ? "R|05를 넣었을 때는 통과했다. 바꾼 건 숫자뿐인데."
-                    : "R|숫자 외에는 건드린 게 없다. 이전 현장 양식의 숫자도 시험해 보자.");
+        if (openArchive)
+        {
+            evidence.Add("복도 CCTV 원본");
+            Speak(CheckEvidence, "시스템|03:12 — 북쪽 복도 카메라. 영상 손상.",
+                "R|화면은 끊겼는데 소리는 남아 있다. 복도 바깥에서 나는 소리가 아니다.");
+        }
         else
-            Speak(CheckEvidence, "시스템|05 — 형식 검증 통과. 초안으로 저장됐습니다.",
-                testedSix ? "R|06에서는 막혔다. 차이는 숫자 하나뿐이다."
-                    : "R|05는 통과한다. 현장 인원을 넣으면 어떻게 되는지 봐야겠다.");
+        {
+            Speak(null, "시스템|상태 보고는 발송 대기 중입니다. 외부 통신에 응답이 없습니다.",
+                "R|기다리는 동안 단말에 남은 CCTV 원본을 열어 보자.");
+        }
     }
 
     private void CheckEvidence()
@@ -291,11 +290,14 @@ public sealed class ReportStageOne : MonoBehaviour
         if (evidence.Count != 3) return;
 
         Speak(() => StartCoroutine(TransformE()),
-            "R|사진엔 여섯 명. 공식 명부엔 다섯 명. 단말도 다섯일 때만 통과한다.",
-            "T|사진과 기록 중 하나만 이상했으면 오래된 자료라고 넘겼겠죠.",
-            "C|지금은 누굴 가리킬 때가 아닙니다. 원본을 남기고, 아무도 혼자 움직이지 마십시오.",
-            "E|…저쪽에서 소리가 나는데요. 잠깐 보고 올게요.",
-            "A|가지 마세요. 아까 들었던 소리랑 같아요.");
+            "R|03:12. 불이 꺼지고, 잠금실 문이 안에서 열렸다. CCTV에 남은 소리도 그때다.",
+            "T|셋 다 같은 시각이네요. 기록이 이상한 줄 알았는데, 정말 복도에 뭔가 있었나 봐요.",
+            "C|원본을 보존하십시오. 전원 여기 모여서 움직입니다.",
+            "A|저기… 다시 들려요. 문 뒤에서요.",
+            "E|…그 소리요? 아. 제가 너무 크게 냈나 보네요.",
+            "R|E 씨. 손에 든 거, 내려놔요.",
+            // J3, 괴담에 떨어졌어도 출근을 해야 하는구나, 272화.
+            "E|음… 그냥… 삼킬까…?");
     }
 
     private IEnumerator TransformE()
@@ -321,10 +323,12 @@ public sealed class ReportStageOne : MonoBehaviour
         enemy.sprite = enemyFrames[0];
         blackout.color = new Color(.15f, 0, 0, .22f);
         cutscene = false;
-        Speak(BeginChase, "A|또 들렸어요. 금속을 긁는 소리.",
+        Speak(BeginChase, "A|E 씨… 왜 목소리가 두 개로 들려요?",
             "T|잠깐만요. 저게 왜 이쪽으로 오는 건데요?",
             "C|R 씨, 복도 끝 잠금실로. 뒤돌아보지 마십시오.",
-            "E|R 씨. 어디 가세요? …아직 대답을 못 들었는데.");
+            // J3, 괴담에 떨어졌어도 출근을 해야 하는구나, 150화.
+            "E|…살아 있었구나.",
+            "E|R 씨. 뛰면 넘어져요. …천천히 와도 되는데.");
     }
 
     private void BeginChase()
@@ -386,9 +390,9 @@ public sealed class ReportStageOne : MonoBehaviour
             End("STAGE 01 종료", "잠금실 봉쇄 완료. R은 연구동 복도에서 의식을 잃었다.");
         }, "시스템|잠금실 출입문 잠금 완료. 수동 해제 필요.",
             "E|R 씨. 문 좀 열어 주세요.",
-            "E|다들 돌아올 텐데요. 혼자 기다리실 거예요?",
-            "R|…돌아온다고?",
-            "E|네. 기다리시면 돼요.");
+            "E|잔은 치우지 마세요. …아침엔 늘 그 자리에 있었잖아요.",
+            "R|…그래. 늘 여섯이었지.",
+            "E|네. 제가 기억해요.");
     }
 
     private void End(string title, string description)
@@ -434,8 +438,8 @@ public sealed class ReportStageOne : MonoBehaviour
         document.enabled = false;
         choices = ReportUI.Place(panel, "Report options", 0, 0, 1, 1);
         ReportUI.Image(choices, "Options background", .18f, .03f, .96f, .29f, Ink);
-        ReportUI.Button(choices, "05 전송", .45f, .052f, .63f, .265f, new Color32(35, 65, 75, 255), Paper, () => SendReport(false));
-        ReportUI.Button(choices, "06 전송", .66f, .052f, .84f, .265f, new Color32(35, 65, 75, 255), Paper, () => SendReport(true));
+        ReportUI.Button(choices, "1 원본 열기", .45f, .052f, .63f, .265f, new Color32(35, 65, 75, 255), Paper, () => HandleSecurityTerminal(true));
+        ReportUI.Button(choices, "2 상태 보고", .66f, .052f, .84f, .265f, new Color32(35, 65, 75, 255), Paper, () => HandleSecurityTerminal(false));
         choices.gameObject.SetActive(false);
         panel.gameObject.SetActive(false);
         endPanel = ReportUI.Place(root, "Result", 0, 0, 1, 1);
@@ -511,8 +515,8 @@ public sealed class ReportStageOne : MonoBehaviour
             || (pad != null && pad.buttonSouth.wasPressedThisFrame);
         if (choosing)
         {
-            if (keys != null && (keys.digit5Key.wasPressedThisFrame || keys.numpad5Key.wasPressedThisFrame)) SendReport(false);
-            else if (keys != null && (keys.digit6Key.wasPressedThisFrame || keys.numpad6Key.wasPressedThisFrame)) SendReport(true);
+            if (keys != null && (keys.digit1Key.wasPressedThisFrame || keys.numpad1Key.wasPressedThisFrame)) HandleSecurityTerminal(true);
+            else if (keys != null && (keys.digit2Key.wasPressedThisFrame || keys.numpad2Key.wasPressedThisFrame)) HandleSecurityTerminal(false);
             return;
         }
         if (dialogue != null)
@@ -626,7 +630,7 @@ public sealed class ReportStageOne : MonoBehaviour
                 objective.text = "분석실 무전기로 지원 요청";
                 break;
             case Phase.Verify:
-                objective.text = $"공동 사진 · 공식 명부 · 인원 보고 단말  {evidence.Count}/3";
+                objective.text = $"전력 로그 · 복도 출입 기록 · CCTV 원본  {evidence.Count}/3";
                 break;
             case Phase.Chase:
                 objective.color = new Color32(255, 160, 143, 255);
