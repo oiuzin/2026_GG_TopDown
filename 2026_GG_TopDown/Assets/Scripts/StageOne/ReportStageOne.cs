@@ -24,17 +24,14 @@ public sealed class ReportStageOne : MonoBehaviour
     private static readonly Vector2Int Entry = new Vector2Int(19, 20);
     private static readonly Vector2Int EnemyEntry = new Vector2Int(10, 16);
 
-    private readonly MainBuildingPlan plan = new MainBuildingPlan();
     private readonly List<Spot> spots = new List<Spot>();
     private readonly List<SpriteRenderer> crew = new List<SpriteRenderer>();
     private readonly HashSet<string> conversations = new HashSet<string>();
     private readonly HashSet<string> observations = new HashSet<string>();
     private readonly HashSet<string> evidence = new HashSet<string>();
     private readonly Dictionary<string, Sprite> portraits = new Dictionary<string, Sprite>();
-    private readonly Vector2Int[,] parents = new Vector2Int[MainBuildingPlan.Width, MainBuildingPlan.Height];
-    private readonly int[,] visited = new int[MainBuildingPlan.Width, MainBuildingPlan.Height];
+    private readonly Dictionary<Vector2Int, Vector2Int> parents = new Dictionary<Vector2Int, Vector2Int>();
     private readonly Queue<Vector2Int> frontier = new Queue<Vector2Int>();
-    private int search;
     private Phase phase;
     private Action afterDialogue;
     private string[] dialogue;
@@ -44,7 +41,9 @@ public sealed class ReportStageOne : MonoBehaviour
     private Text heading, objective, hint, speaker, message, advance;
     private RectTransform hud, panel, choices, endPanel;
     private Image portrait, blackout, document;
-    private SpriteRenderer shutter;
+    [SerializeField] private Tilemap ground;
+    [SerializeField] private Tilemap walls;
+    [SerializeField] private SpriteRenderer shutter;
     private AudioSource effects;
     private SpriteRenderer player, enemy;
     private Sprite[] playerFrames, enemyFrames, morphFrames;
@@ -68,7 +67,6 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         AudioListener.volume = PlayerPrefs.GetFloat("ReportVolume", 1);
         effects = gameObject.AddComponent<AudioSource>();
-        BuildMap();
         BuildInterface();
         playerFrames = ReportUI.Sheet("Crew/R/walk-128px", 3, 4, 104);
         enemyFrames = ReportUI.Sheet("Crew/spider", 3, 4, 78);
@@ -104,57 +102,6 @@ public sealed class ReportStageOne : MonoBehaviour
             "E|여기선 다들 비슷하게 입고 있으니까, 제가 잘못 봤을 수도 있죠.");
     }
 
-    private void BuildMap()
-    {
-        var grid = new GameObject("본관동 1층", typeof(Grid));
-        grid.transform.SetParent(transform, false);
-        var floorObject = new GameObject("바닥과 벽", typeof(Tilemap), typeof(TilemapRenderer));
-        floorObject.transform.SetParent(grid.transform, false);
-        var floor = floorObject.GetComponent<Tilemap>();
-        floorObject.GetComponent<TilemapRenderer>().sharedMaterial = spriteMaterial;
-        Tile[] finishes =
-        {
-            TileFor("corridor_1", Color.white), TileFor("corridor_2", Color.white),
-            TileFor("corridor_3", Color.white), TileFor("bunk_floor_1", Color.white),
-            TileFor("wall_main", new Color32(157, 177, 198, 255)),
-            TileFor("hazard_stripe", Color.white)
-        };
-        for (int y = 0; y < MainBuildingPlan.Height; y++)
-        for (int x = 0; x < MainBuildingPlan.Width; x++)
-        {
-            var cell = new Vector2Int(x, y);
-            int finish = !plan.Walkable(cell) ? 4 : (x * 19 + y * 23) % 3;
-            if (finish != 4 && ((y < 6 && x < 16) || (x < 6 && y < 17))) finish = 3;
-            if (y == 22 && x >= 18 && x <= 20) finish = 5;
-            floor.SetTile(new Vector3Int(x, -y, 0), finishes[finish]);
-        }
-        floor.transform.localPosition = new Vector3(-.5f, -.5f, 0);
-
-        Prop("bed", 2, 2, 1.7f); Prop("bed", 2, 4, 1.7f);
-        Prop("bed", 10, 2, 1.7f); Prop("bed", 10, 4, 1.7f);
-        Prop("bed", 2, 8, 1.7f); Prop("bed", 2, 13, 1.7f);
-        Prop("couch", 18, 2, 2.4f); Prop("couch", 21, 2, 2.4f);
-        Prop("dining_table", 4, 19, 2.7f); Prop("dining_table", 4, 21, 2.7f);
-        Prop("dining_table", 11, 21, 2.7f);
-        Prop("radio_bank", 36, 10, 2.7f);
-        Prop("locker", 36, 19, 2.4f); Prop("locker", 33, 19, 2.4f);
-        Prop("archive_drawer", 27, 21, 1.8f);
-        Prop("archive_workstation", 28, 20, 1.8f);
-        Prop("siren", 20, 7, .7f);
-        Prop("claw_marks", 16, 15, .85f);
-        shutter = Prop("security_shutter", 19, 22, 2.5f);
-        shutter.enabled = false;
-    }
-
-    private static Tile TileFor(string name, Color color)
-    {
-        var tile = ScriptableObject.CreateInstance<Tile>();
-        var texture = Resources.Load<Texture2D>("AnomalyReport/Main/" + name);
-        tile.sprite = ReportUI.Asset("Main/" + name, texture.width);
-        tile.color = color;
-        return tile;
-    }
-
     private SpriteRenderer RendererAt(string name, Sprite sprite, Vector2Int cell, int order)
     {
         var item = new GameObject(name, typeof(SpriteRenderer));
@@ -165,13 +112,6 @@ public sealed class ReportStageOne : MonoBehaviour
         renderer.sharedMaterial = spriteMaterial;
         renderer.sortingOrder = order;
         return renderer;
-    }
-
-    private SpriteRenderer Prop(string name, int x, int y, float width)
-    {
-        var texture = Resources.Load<Texture2D>("AnomalyReport/Main/" + name);
-        return RendererAt(name, ReportUI.Asset("Main/" + name, texture.width / width),
-            new Vector2Int(x, y), 2);
     }
 
     private void SetupInteractions()
@@ -187,20 +127,19 @@ public sealed class ReportStageOne : MonoBehaviour
         AddCrew("E", 4, 7, "아, 잘못 봤을 수도 있죠. 여기선 다들 비슷하게 입고 있으니까.",
             "누군가 이상하다고 느껴지면 먼저 자기 기억을 확인해 봐요.");
 
-        Inspect("공동 사진", 19, 4, "team_photo_board", "여섯 명이 찍힌 사진이다. 누가 찍었는지는 기억나지 않는다.",
+        Inspect("공동 사진", 19, 4, "여섯 명이 찍힌 사진이다. 누가 찍었는지는 기억나지 않는다.",
             "사진 뒤에는 다섯 명의 코드만 적혀 있다.", true);
-        Inspect("식당 머그잔", 5, 19, "enamel_mugs", "잔이 여섯 개. 손잡이마다 작은 흠집이 있다.",
+        Inspect("식당 머그잔", 5, 19, "잔이 여섯 개. 손잡이마다 작은 흠집이 있다.",
             "누군가 한 개를 치웠다. 자국은 여섯 개 그대로 남아 있다.");
-        Inspect("커피 주전자", 24, 3, "coffee_kettle", "아직 따뜻하다. D가 아까부터 이것만 찾았다.",
+        Inspect("커피 주전자", 24, 3, "아직 따뜻하다. D가 아까부터 이것만 찾았다.",
             "누군가 방금 커피를 따른 것 같은데 주전자는 차갑다.");
-        Inspect("복도 긁힌 자국", 16, 15, null, "무거운 물건을 끌고 간 흔적이다.");
-        Inspect("숙소 개인 메모", 3, 14, null, "오늘도 같은 꿈.");
-        Inspect("전력 로그", 30, 4, "power_log_terminal", "사용자 표시가 없는 기록이 세 건 있다.",
+        Inspect("복도 긁힌 자국", 16, 15, "무거운 물건을 끌고 간 흔적이다.");
+        Inspect("숙소 개인 메모", 3, 14, "오늘도 같은 꿈.");
+        Inspect("전력 로그", 30, 4, "사용자 표시가 없는 기록이 세 건 있다.",
             "사용자 기록은 다섯 개. 전력 소비량은 여섯 작업대 분량이다.");
-        Inspect("공식 명부", 27, 20, "roster_board", "오늘 작업 지시에는 관제실 확인이 적혀 있다.",
+        Inspect("공식 명부", 27, 20, "오늘 작업 지시에는 관제실 확인이 적혀 있다.",
             "등록 대원은 R, D, A, C, T. 다섯 명뿐이다.", true);
 
-        Prop("generator_damage_photo", 32, 4, .9f);
         AddSpot("발전기 손상 사진", 32, 4, () =>
         {
             if (phase == Phase.Survey && conversations.Count == 5 && observations.Count >= 4)
@@ -214,7 +153,6 @@ public sealed class ReportStageOne : MonoBehaviour
         }, () => phase <= Phase.Verify);
 
         AddSpot("본부 무전", 37, 11, Radio, () => phase <= Phase.Verify);
-        Prop("door_access_log", 33, 12, .9f);
         AddSpot("인원 보고 단말", 33, 12, () =>
         {
             if (phase == Phase.Verify) OpenChoices();
@@ -222,7 +160,6 @@ public sealed class ReportStageOne : MonoBehaviour
         }, () => phase <= Phase.Verify);
 
         AddSpot("건물 전체 봉쇄", 36, 2, LockDown, () => phase == Phase.Chase);
-        Prop("power_log_terminal", 36, 2, 1.15f);
     }
 
     private void AddCrew(string code, int x, int y, string first, string second)
@@ -238,10 +175,9 @@ public sealed class ReportStageOne : MonoBehaviour
         }, () => phase <= Phase.Verify);
     }
 
-    private void Inspect(string name, int x, int y, string art, string first, string revised = null,
+    private void Inspect(string name, int x, int y, string first, string revised = null,
         bool verification = false)
     {
-        if (art != null) Prop(art, x, y, .86f);
         AddSpot(name, x, y, () =>
         {
             if (phase == Phase.Verify && revised != null)
@@ -535,12 +471,18 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private static int Axis(bool positive, bool negative) => (positive ? 1 : 0) - (negative ? 1 : 0);
 
+    private bool WalkableCell(Vector2Int cell)
+    {
+        var tile = new Vector3Int(cell.x, -cell.y, 0);
+        return ground.HasTile(tile) && !walls.HasTile(tile);
+    }
+
     private bool Walkable(Vector2 center, float radius)
     {
-        return plan.Walkable(MainBuildingPlan.Cell(center + new Vector2(-radius, -radius)))
-            && plan.Walkable(MainBuildingPlan.Cell(center + new Vector2(-radius, radius)))
-            && plan.Walkable(MainBuildingPlan.Cell(center + new Vector2(radius, -radius)))
-            && plan.Walkable(MainBuildingPlan.Cell(center + new Vector2(radius, radius)));
+        return WalkableCell(MainBuildingPlan.Cell(center + new Vector2(-radius, -radius)))
+            && WalkableCell(MainBuildingPlan.Cell(center + new Vector2(-radius, radius)))
+            && WalkableCell(MainBuildingPlan.Cell(center + new Vector2(radius, -radius)))
+            && WalkableCell(MainBuildingPlan.Cell(center + new Vector2(radius, radius)));
     }
 
     private void FindSpot(Vector2 position)
@@ -623,23 +565,22 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private Vector2Int NextCell(Vector2Int start, Vector2Int destination)
     {
-        if (start == destination || !plan.Walkable(destination)) return start;
+        if (start == destination || !WalkableCell(destination)) return start;
         frontier.Clear();
-        search++;
+        parents.Clear();
         frontier.Enqueue(start);
-        visited[start.x, start.y] = search;
+        parents.Add(start, start);
         while (frontier.Count > 0)
         {
             Vector2Int current = frontier.Dequeue();
             foreach (Vector2Int direction in Directions)
             {
                 Vector2Int next = current + direction;
-                if (!plan.Walkable(next) || visited[next.x, next.y] == search) continue;
-                visited[next.x, next.y] = search;
-                parents[next.x, next.y] = current;
+                if (!WalkableCell(next) || parents.ContainsKey(next)) continue;
+                parents[next] = current;
                 if (next == destination)
                 {
-                    while (parents[next.x, next.y] != start) next = parents[next.x, next.y];
+                    while (parents[next] != start) next = parents[next];
                     return next;
                 }
                 frontier.Enqueue(next);
