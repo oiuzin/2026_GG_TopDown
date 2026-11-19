@@ -16,6 +16,7 @@ public sealed class ReportStageOne : MonoBehaviour
     public const string CheckpointKey = "AnomalyReport.StageOne.Chase";
     private enum Phase { Survey, Report, Verify, Chase, Finished }
 
+    private const float CrewPixelsPerUnit = 80f;
     private static readonly Color Ink = new Color32(13, 24, 33, 250);
     private static readonly Color Paper = new Color32(210, 230, 233, 255);
     private static readonly Color Signal = new Color32(136, 222, 226, 255);
@@ -47,7 +48,7 @@ public sealed class ReportStageOne : MonoBehaviour
     private AudioSource effects;
     private SpriteRenderer player, enemy;
     private Sprite[] playerFrames, enemyFrames, morphFrames;
-    private Camera view;
+    [SerializeField] private Camera view;
     private Spot nearest;
     private Vector2 enemyTarget;
     private int playerDirection, enemyDirection;
@@ -68,22 +69,15 @@ public sealed class ReportStageOne : MonoBehaviour
         AudioListener.volume = PlayerPrefs.GetFloat("ReportVolume", 1);
         effects = gameObject.AddComponent<AudioSource>();
         BuildInterface();
-        playerFrames = ReportUI.Sheet("Crew/R/walk-128px", 3, 4, 104);
+        playerFrames = ReportUI.Sheet("Crew/R/walk-128px", 3, 4, CrewPixelsPerUnit);
         enemyFrames = ReportUI.Sheet("Crew/spider", 3, 4, 78);
         morphFrames = ReportUI.Sheet("Crew/morph", 4, 2, 104);
-        portraits.Add("R", ReportUI.Asset("Crew/R/dialogue"));
+        LoadPortrait("R");
         player = RendererAt("R", playerFrames[0], Entry, 5);
         enemy = RendererAt("E 변이체", enemyFrames[0], EnemyEntry, 5);
         enemy.enabled = false;
         SetupInteractions();
 
-        var cameraObject = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
-        cameraObject.tag = "MainCamera";
-        view = cameraObject.GetComponent<Camera>();
-        view.orthographic = true;
-        view.orthographicSize = 5.9f;
-        view.clearFlags = CameraClearFlags.SolidColor;
-        view.backgroundColor = new Color32(7, 15, 24, 255);
         Follow(1);
 
         if (PlayerPrefs.HasKey(CheckpointKey))
@@ -94,12 +88,13 @@ public sealed class ReportStageOne : MonoBehaviour
 
         player.transform.position = MainBuildingPlan.World(new Vector2Int(8, 20));
         Follow(1);
+        ShowObjective(player.transform.position);
         Speak(null, "D|아, 드디어 일어났네. 너 없으면 오늘도 내가 일 다 할 뻔했잖아.",
-            "R|어제도 네가 그렇게 말했어.",
+            "R|이상하다. 어제는 내가 다 했던 것 같은데.",
             "A|밤에 문 두드리는 소리 못 들었어요?",
-            "C|R, 관제실에 있는 어젯밤 기록을 확인해 줘.",
-            "T|전력 로그를 다시 확인해 볼게요.",
-            "E|여기선 다들 비슷하게 입고 있으니까, 제가 잘못 봤을 수도 있죠.");
+            "C|R 씨. 관제실에서 어젯밤 기록을 확인해 주십시오.",
+            "T|제가 전력 로그 볼게요. 이번에도 제가 확인하는 거죠?",
+            "E|어제 복도에 나오셨던데요. …아, 아니었나요? 그럼 제가 잘못 봤나 보네요.");
     }
 
     private SpriteRenderer RendererAt(string name, Sprite sprite, Vector2Int cell, int order)
@@ -116,56 +111,65 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void SetupInteractions()
     {
-        AddCrew("D", 21, 4, "기록보다 먼저 커피 좀 확인해. 이건 생존 문제야.",
+        AddCrew("D", 22, 4, "기록보다 먼저 커피 좀 확인해. 이건 생존 문제야.",
             "어젯밤엔 창가 쪽에서 이상한 소리가 났어.");
         AddCrew("A", 8, 8, "본관동 안쪽에서 누가 문을 두드렸어요.",
             "문을 열어 봤을 땐 아무도 없었어요.");
-        AddCrew("C", 35, 4, "기록 확인, 전력 점검, 통신 확인. 순서대로.",
-            "밖으로 나가는 건 눈보라가 잦아든 뒤에.");
-        AddCrew("T", 33, 2, "어젯밤 전력 사용량이 맞지 않아요.",
-            "로그에는 사용자가 없어요. 그러니까 더 이상하죠.");
-        AddCrew("E", 4, 7, "아, 잘못 봤을 수도 있죠. 여기선 다들 비슷하게 입고 있으니까.",
-            "누군가 이상하다고 느껴지면 먼저 자기 기억을 확인해 봐요.");
+        AddCrew("C", 37, 4, "기록 확인이 먼저입니다. 다음은 전력, 마지막으로 통신입니다.",
+            "눈보라가 잦아들 때까지 외부 출입은 보류하십시오.");
+        AddCrew("T", 34, 3, "어젯밤 숫자가 안 맞던데요. 직접 확인해 보셨어요?",
+            "사용자는 안 찍혔어요. 나중에 제가 썼다고만 하지 마세요.");
+        AddCrew("E", 4, 7, "밤에 복도에 나오시는 줄 알았어요. …아니셨으면 됐습니다.",
+            "기억이 틀리는 일도 있잖아요. 저도 가끔 그러는데요.");
 
-        Inspect("공동 사진", 19, 4, "여섯 명이 찍힌 사진이다. 누가 찍었는지는 기억나지 않는다.",
-            "사진 뒤에는 다섯 명의 코드만 적혀 있다.", true);
-        Inspect("식당 머그잔", 5, 19, "잔이 여섯 개. 손잡이마다 작은 흠집이 있다.",
-            "누군가 한 개를 치웠다. 자국은 여섯 개 그대로 남아 있다.");
-        Inspect("커피 주전자", 24, 3, "아직 따뜻하다. D가 아까부터 이것만 찾았다.",
-            "누군가 방금 커피를 따른 것 같은데 주전자는 차갑다.");
+        Inspect("공동 사진", 25, 2, "여섯 명이 찍힌 사진이다. 누가 찍었는지는 기억나지 않는다.",
+            "사진 뒤에는 다섯 명의 코드만 적혀 있다.", true, "team_photo_board");
+        Inspect("식당 머그잔", 11, 19, "잔이 여섯 개. 손잡이마다 작은 흠집이 있다.",
+            "누군가 한 개를 치웠다. 자국은 여섯 개 그대로 남아 있다.", documentArt: "enamel_mugs");
+        Inspect("커피 주전자", 24, 4, "아직 따뜻하다. D가 아까부터 이것만 찾았다.",
+            "누군가 방금 커피를 따른 것 같은데 주전자는 차갑다.", documentArt: "coffee_kettle");
         Inspect("복도 긁힌 자국", 16, 15, "무거운 물건을 끌고 간 흔적이다.");
         Inspect("숙소 개인 메모", 3, 14, "오늘도 같은 꿈.");
-        Inspect("전력 로그", 30, 4, "사용자 표시가 없는 기록이 세 건 있다.",
-            "사용자 기록은 다섯 개. 전력 소비량은 여섯 작업대 분량이다.");
+        Inspect("전력 로그", 30, 2, "사용자 표시가 없는 기록이 세 건 있다.",
+            "사용자 기록은 다섯 개. 전력 소비량은 여섯 작업대 분량이다.", documentArt: "power_log_terminal");
         Inspect("공식 명부", 27, 20, "오늘 작업 지시에는 관제실 확인이 적혀 있다.",
-            "등록 대원은 R, D, A, C, T. 다섯 명뿐이다.", true);
+            "등록 대원은 R, D, A, C, T. 다섯 명뿐이다.", true, verifiedArt: "official_roster_R_D_A_C_T");
 
-        AddSpot("발전기 손상 사진", 32, 4, () =>
+        AddSpot("발전기 손상 사진", 33, 2, () =>
         {
             if (phase == Phase.Survey && conversations.Count == 5 && observations.Count >= 4)
             {
                 phase = Phase.Report;
-                Speak(null, "R|금속판이 안쪽으로 휘었어. 이건 공구 자국이 아닌데.",
-                    "T|사진의 손상 폭을 보세요. 같은 방향으로 긁혔어요.",
-                    "C|일단 본부에 보고하자. 지원이 필요해.");
+                Speak(null, "R|긁힌 방향은 하나다. 그런데 철판까지 안으로 휘었다. 공구로 이게 되나?",
+                    "T|손상 폭 보이세요? 적어도 이걸 정비 실수로 적으면 안 되겠는데요.",
+                    "C|사진을 남기십시오. 본부에 손상과 지원 요청을 함께 올리겠습니다.");
             }
             else Speak(null, "R|금속판이 안쪽으로 휘었다. 긁힌 자국이 크고 깊다.");
+            ShowDocument("generator_damage_photo");
         }, () => phase <= Phase.Verify);
 
         AddSpot("본부 무전", 37, 11, Radio, () => phase <= Phase.Verify);
-        AddSpot("인원 보고 단말", 33, 12, () =>
+        AddSpot("인원 보고 단말", 33, 11, () =>
         {
             if (phase == Phase.Verify) OpenChoices();
             else Speak(null, "R|인원 현황을 입력하는 단말이다.");
         }, () => phase <= Phase.Verify);
 
-        AddSpot("건물 전체 봉쇄", 36, 2, LockDown, () => phase == Phase.Chase);
+        AddSpot("건물 전체 봉쇄", 36, 3, LockDown, () => phase == Phase.Chase);
+    }
+
+    private void LoadPortrait(string code)
+    {
+        var texture = Resources.Load<Texture2D>($"AnomalyReport/Crew/{code}/dialogue");
+        int topMargin = code switch { "C" => 10, "T" => 4, "D" => 1, _ => 0 };
+        var visible = new Rect(0, 0, texture.width, texture.height - topMargin);
+        portraits.Add(code, Sprite.Create(texture, visible, new Vector2(.5f, .5f)));
     }
 
     private void AddCrew(string code, int x, int y, string first, string second)
     {
-        portraits.Add(code, ReportUI.Asset("Crew/" + code + "/dialogue"));
-        var frame = ReportUI.Sheet("Crew/" + code + "/walk-128px", 3, 4, 104)[0];
+        LoadPortrait(code);
+        var frame = ReportUI.Sheet("Crew/" + code + "/walk-128px", 3, 4, CrewPixelsPerUnit)[0];
         crew.Add(RendererAt(code, frame, new Vector2Int(x, y), 5));
         AddSpot(code + " 대화", x, y, () =>
         {
@@ -176,7 +180,7 @@ public sealed class ReportStageOne : MonoBehaviour
     }
 
     private void Inspect(string name, int x, int y, string first, string revised = null,
-        bool verification = false)
+        bool verification = false, string documentArt = null, string verifiedArt = null)
     {
         AddSpot(name, x, y, () =>
         {
@@ -184,12 +188,14 @@ public sealed class ReportStageOne : MonoBehaviour
             {
                 if (verification) evidence.Add(name);
                 Speak(CheckEvidence, "R|" + revised);
-                if (name == "공식 명부") ShowDocument("official_roster_R_D_A_C_T");
+                string art = verifiedArt ?? documentArt;
+                if (art != null) ShowDocument(art);
             }
             else
             {
                 observations.Add(name);
                 Speak(null, "R|" + first);
+                if (documentArt != null) ShowDocument(documentArt);
             }
         }, () => phase <= Phase.Verify);
     }
@@ -198,8 +204,9 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         var marker = RendererAt(name + " 표시", null, new Vector2Int(x, y), 8);
         marker.sprite = ReportUI.Asset("Main/hazard_stripe", 96);
-        marker.transform.localScale = new Vector3(1.4f, .45f, 1);
-        marker.transform.position += Vector3.up * .67f;
+        marker.color = Signal;
+        marker.transform.localScale = new Vector3(1.15f, .45f, 1);
+        marker.transform.position += Vector3.up * .88f;
         marker.enabled = false;
         spots.Add(new Spot { Position = MainBuildingPlan.World(new Vector2Int(x, y)),
             Name = name, Inspect = action, Available = available, Marker = marker });
@@ -219,10 +226,10 @@ public sealed class ReportStageOne : MonoBehaviour
             "C|여기는 현장 기지. 현재 여섯 명 모두 생존. 부상자 없습니다.",
             "본부|……여섯 명이라고 하셨습니까?",
             "본부|등록 인원은 총 다섯 명입니다. R, D, A, C, T. 추가 등록 인원은 없습니다.",
-            "R|본부, 현장에는 분명 여섯 명이 있습니다.",
-            "E|일단 진정해요. 서류가 잘못됐을 수도 있죠.",
+            "R|본부, 다시 확인 부탁드립니다. 지금 제 앞에 다섯 명이 있습니다. 저까지 여섯입니다.",
+            "E|글쎄요. 서류 한 장쯤 틀릴 수도 있잖아요. 다들 여기 있는데요.",
             "본부|단독 행동을 금지하십시오. 모든 이상 징후를 기록하고 보고하십시오.",
-            "C|어제 기록과 오늘 기록부터 맞춰 보자.");
+            "C|인원을 단정하기 전에 어제 기록과 오늘 기록을 대조합니다.");
     }
 
     private void OpenChoices()
@@ -244,9 +251,9 @@ public sealed class ReportStageOne : MonoBehaviour
         {
             evidence.Add("인원 보고 오류");
             Speak(CheckEvidence, "시스템|현장 인원 보고 06 — 등록 정보와 일치하지 않습니다.",
-                "R|여섯 명이 여기 있는데 다섯 명만 적으라고요?",
+                "R|06만 막힌다. 보고하라면서, 정작 틀린 숫자는 입력조차 안 된다고?",
                 "본부|확인된 인원만 기재하십시오. 모든 이상 징후를 누락 없이 기록하십시오.",
-                "C|전송은 보류해. 종이 기록은 따로 남겨 두자.");
+                "C|전송을 멈추십시오. 실제 인원은 종이에 따로 남깁니다.");
         }
         else Speak(null, "시스템|05 입력 정상. 전송 대기 중.",
             "R|입력은 되지만 현장 인원과 다르다. 06도 확인해 봐야겠다.");
@@ -281,9 +288,9 @@ public sealed class ReportStageOne : MonoBehaviour
         blackout.color = new Color(.15f, 0, 0, .22f);
         cutscene = false;
         Speak(BeginChase, "A|또 들렸어요. 금속을 긁는 소리.",
-            "T|저건… 저건 사람이 아니에요.",
-            "C|R, 관제실로 뛰어. 지금.",
-            "E|R. 어디 가요? 우리 아직 얘기 끝나지 않았는데.");
+            "T|잠깐만요. 저게 왜 이쪽으로 오는 건데요?",
+            "C|R 씨, 관제실로. 뒤돌아보지 마십시오.",
+            "E|R 씨. 어디 가세요? …아직 대답을 못 들었는데.");
     }
 
     private void BeginChase()
@@ -313,10 +320,10 @@ public sealed class ReportStageOne : MonoBehaviour
             PlayerPrefs.Save();
             End("STAGE 01 종료", "본관동 전체 봉쇄 완료. R의 의식이 끊겼다.");
         }, "시스템|본관동 전체 봉쇄 완료. 출입 통제 활성화.",
-            "E|R. 문 열어요.",
-            "E|다들 돌아올 텐데. 혼자 기다릴 수 있겠어요?",
-            "R|무슨 뜻이야.",
-            "E|그냥, 기다리면 알게 될 거예요.");
+            "E|R 씨. 문 좀 열어 주세요.",
+            "E|다들 돌아올 텐데요. 혼자 기다리실 거예요?",
+            "R|…돌아온다고?",
+            "E|네. 기다리시면 돼요.");
     }
 
     private void End(string title, string description)
@@ -349,7 +356,10 @@ public sealed class ReportStageOne : MonoBehaviour
         shadow.effectDistance = new Vector2(2, -2);
 
         panel = ReportUI.Image(root, "Dialogue", .065f, .048f, .935f, .288f, Ink).rectTransform;
-        portrait = ReportUI.Image(panel, "Portrait", .022f, .14f, .155f, .88f, Color.white);
+        var portraitFrame = ReportUI.Image(panel, "Portrait frame", .026f, .12f, .152f, .88f,
+            new Color32(21, 38, 48, 255));
+        portrait = ReportUI.Image(portraitFrame.transform, "Portrait", .065f, .03f, .935f, .96f, Color.white);
+        portrait.preserveAspect = false;
         speaker = ReportUI.Label(panel, "", .174f, .68f, .91f, .93f, 36, Signal, TextAnchor.MiddleLeft);
         message = ReportUI.Label(panel, "", .174f, .30f, .951f, .67f, 34, Paper, TextAnchor.MiddleLeft);
         advance = ReportUI.Label(panel, "", .67f, .03f, .84f, .27f, 23, Paper, TextAnchor.MiddleRight);
@@ -393,6 +403,7 @@ public sealed class ReportStageOne : MonoBehaviour
         message.text = text;
         portrait.enabled = portraits.TryGetValue(name, out Sprite thumbnail);
         portrait.sprite = thumbnail;
+        portrait.transform.parent.gameObject.SetActive(portrait.enabled);
     }
 
     private void ShowDocument(string texture)
@@ -492,7 +503,6 @@ public sealed class ReportStageOne : MonoBehaviour
         foreach (Spot spot in spots)
         {
             bool available = spot.Available();
-            spot.Marker.enabled = available && (position - spot.Position).sqrMagnitude < 22f;
             float distance = (position - spot.Position).sqrMagnitude;
             if (available && distance < best && ClearPath(position, spot.Position))
             {
@@ -503,7 +513,7 @@ public sealed class ReportStageOne : MonoBehaviour
 
         hint.text = nearest != null ? $"[F]  {nearest.Name}" : "WASD / 방향키 이동   ·   F 조사 및 대화";
         foreach (Spot spot in spots)
-            spot.Marker.color = spot == nearest ? Signal : new Color(.75f, .78f, .83f, .6f);
+            spot.Marker.enabled = spot == nearest;
     }
 
     private bool ClearPath(Vector2 start, Vector2 destination)
