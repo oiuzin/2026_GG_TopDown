@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
@@ -13,7 +14,7 @@ public sealed class ReportStageOne : MonoBehaviour
 {
     [SerializeField] private Font interfaceFont;
     [SerializeField] private Material spriteMaterial;
-    public const string CheckpointKey = "AnomalyReport.StageOne.RecordChase";
+    public const string CheckpointKey = "AnomalyReport.StageOne.MainBuildingChase";
     private enum Phase { Survey, Report, Verify, Chase, Finished }
 
     private const float CrewPixelsPerUnit = 80f;
@@ -22,20 +23,19 @@ public sealed class ReportStageOne : MonoBehaviour
     private static readonly Color Signal = new Color32(136, 222, 226, 255);
     private static readonly Vector2Int[] Directions =
         { Vector2Int.right, Vector2Int.left, Vector2Int.up, Vector2Int.down };
-    private static readonly Vector2Int Entry = new Vector2Int(24, 11);
-    private static readonly Vector2Int EnemyEntry = new Vector2Int(15, 11);
+    private static readonly Vector2Int Entry = new Vector2Int(7, 14);
+    private static readonly Vector2Int EnemyEntry = new Vector2Int(4, 13);
 
     private readonly List<Spot> spots = new List<Spot>();
     private readonly List<SpriteRenderer> crew = new List<SpriteRenderer>();
     private readonly HashSet<string> conversations = new HashSet<string>();
-    private readonly HashSet<string> observations = new HashSet<string>();
     private readonly HashSet<string> evidence = new HashSet<string>();
     private readonly Dictionary<string, Sprite> portraits = new Dictionary<string, Sprite>();
     private readonly Dictionary<Vector2Int, Vector2Int> parents = new Dictionary<Vector2Int, Vector2Int>();
     private readonly Queue<Vector2Int> frontier = new Queue<Vector2Int>();
     private Phase phase;
     private Action afterDialogue;
-    private string[] dialogue;
+    private DialogueLine[] dialogue;
     private int line;
     private bool cutscene;
     private bool choosing;
@@ -56,7 +56,16 @@ public sealed class ReportStageOne : MonoBehaviour
     private int playerDirection, enemyDirection;
     private float enemyGrace, lungeCooldown, lungeWindup, lungeRemaining;
     private bool locked;
-    private bool usedHatch;
+    private Inventory inventory;
+    private PlayerHealth health;
+    private Item storageKey;
+    private Talk menuChoices;
+    private Text choiceOneLabel, choiceTwoLabel;
+    private string room = "복도";
+    private bool loungeOpened;
+    private bool enemyCrossed;
+    private float enemyDoorDelay;
+    private static readonly Vector2Int ControlEntry = new Vector2Int(7, 54);
 
     private sealed class Spot
     {
@@ -79,6 +88,11 @@ public sealed class ReportStageOne : MonoBehaviour
         morphFrames = ReportUI.Sheet("Crew/morph", 4, 2, 60);
         LoadPortrait("R");
         player = RendererAt("R", playerFrames[0], Entry, 5);
+        inventory = player.gameObject.AddComponent<Inventory>();
+        health = player.gameObject.AddComponent<PlayerHealth>();
+        menuChoices = gameObject.AddComponent<Talk>();
+        menuChoices.onChoice1 = new UnityEvent();
+        menuChoices.onChoice2 = new UnityEvent();
         enemy = RendererAt("E 변이체", enemyFrames[0], EnemyEntry, 5);
         enemy.enabled = false;
         SetupInteractions();
@@ -91,17 +105,9 @@ public sealed class ReportStageOne : MonoBehaviour
             return;
         }
 
-        player.transform.position = MainBuildingPlan.World(new Vector2Int(15, 5));
+        player.transform.position = MainBuildingPlan.World(new Vector2Int(19, 4));
         Follow(1);
         ShowObjective(player.transform.position);
-        Speak(null, "D|아, 드디어 일어났네. 너 없으면 오늘도 내가 일 다 할 뻔했잖아.",
-            "R|어제는 우리 여섯이 끝냈잖아. 오늘도 늘 하던 대로 하면 돼.",
-            "A|아까 복도에서 무거운 걸 끌고 가는 소리가 났어요.",
-            "C|우선 시설 상태부터 확인합니다. R 씨, 분석실 기록을 맡아 주십시오.",
-            "T|어젯밤부터 전력 숫자가 이상하던데요. 이번에도 제가 확인하는 거죠?",
-            "E|R 씨, 어제 잠은 좀 잤어요? 밤에 복도에서 뵌 것 같은데.",
-            "R|내가요?",
-            "E|…아, 아니었나요? 그럼 제가 잘못 봤나 보네요.");
     }
 
     private SpriteRenderer RendererAt(string name, Sprite sprite, Vector2Int cell, int order)
@@ -118,66 +124,135 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void SetupInteractions()
     {
-        AddCrew("D", 9, 4, "내가 어제 표시해 둔 공구가 없어. 혹시 봤어?",
-            "커피부터 확인해 줘. 이건 생존 문제야.");
-        AddCrew("A", 12, 7, "복도에서 뭔가 끌려가는 소리를 들었어요.",
-            "문을 열었을 때는 아무도 없었어요.");
-        AddCrew("C", 25, 5, "R 씨, 분석실에서 어젯밤 기록을 확인해 주십시오.",
-            "기록 확인이 먼저입니다. 다음은 전력, 마지막으로 통신입니다.");
-        AddCrew("T", 17, 17, "같은 전력 오류가 세 번 났어요. 이쯤 되면 원인부터 봐야죠.",
-            "사용자는 안 찍혔어요. 나중에 제가 썼다고만 하지 마세요.");
-        AddCrew("E", 31, 3, "창밖 좀 봐요. 여기 오기 전엔 눈이 이렇게 조용할 줄 알았는데.",
-            "…바람 소리요? 익숙해져서 못 느꼈나 보네요.");
+        AddRoom("침실 A", 6, 3, 2, 23);
+        AddRoom("침실 B", 13, 3, 28, 23);
+        AddRoom("휴게실", 21, 3, 54, 36);
+        AddRoom("관제실", 32, 3, 2, 49);
+        AddRoom("통신실", 38, 7, 28, 49);
+        AddRoom("창고", 38, 13, 54, 49);
+        AddRoom("침실 D", 8, 16, 2, 36);
+        AddRoom("식당", 23, 16, 28, 36);
+        AddRoom("침실 C", 32, 16, 54, 23);
 
-        Inspect("공동 사진", 21, 3, "여섯 명이 찍힌 사진이다. 찍은 사람은 기억나지 않는다.",
-            "늘 같이 찍던 자리다. 어제는 이 사진이 책상 위에 있었는데.", documentArt: "team_photo_board");
-        Inspect("공동 머그잔", 14, 6, "잔은 여섯 개. 손잡이마다 작은 흠집이 있다.",
-            "늘 쓰는 잔 여섯 개가 그대로다. 물만 식었다.", documentArt: "enamel_mugs");
-        Inspect("커피 주전자", 10, 6, "아직 따뜻하다. D가 아까부터 이것만 찾았다.",
-            "방금 따른 것처럼 보이는데 주전자가 차갑다.", documentArt: "coffee_kettle");
-        Inspect("작업 배치표", 29, 3, "내 이름 옆에 ‘분석실 확인’이 적혀 있다.",
-            "오늘 야간 점검은 취소됐다고 했는데, 복도 점검 칸에 완료 표시가 있다.");
-        Inspect("연구실 창문", 31, 2, "눈 때문에 맞은편 건물도 잘 보이지 않는다.",
-            "유리 위 손자국이 안쪽을 향해 번져 있다.");
-        Inspect("개인 메모", 19, 6, "메모에 「오늘도 같은 꿈」이라고 쓰여 있다.",
-            "내 필체와 비슷하다. 쓴 기억은 없다.");
-        Inspect("복도 긁힌 자국", 24, 12, "무거운 물건을 끌고 간 흔적이다.");
-        Inspect("복도 비상등", 14, 9, "주전원이 꺼져도 이 불은 남는다.");
-        Inspect("전력 로그", 18, 19, "새벽에 잠깐 전원이 끊겼다. 상세 기록은 무전 후 열어 볼 수 있다.",
-            "03:12에 주전원을 차단했다. 그 뒤에도 복도 쪽 감지기는 계속 반응했다.", true, "power_log_terminal");
-        Inspect("종이 점검표", 22, 19, "수기로 날짜와 설비 상태를 적는 점검표다.",
-            "어제 점검자는 복도에서 끌리는 소리를 들었다고 적었다. 오늘 A가 들은 것과 같다.");
-        Inspect("복도 출입 기록", 23, 19, "복도 출입 기록이다. 사진을 확인한 뒤 원본 기록들을 대조하자.",
-            "03:12. 양쪽 셔터는 닫혀 있었다. 그런데 연구동 안쪽의 잠금실 문이 안에서 열렸다.",
-            true, "door_access_log");
-        Inspect("잠금실 출입문", 27, 13, "외부 잠금 스위치가 있다. 안쪽에는 점검용 비상구가 보인다.");
+        AddCrew("D", 56, 40, "늦었네 R. 오늘도 제일 마지막이야?", "아직 교대 전이라고? 그럼 커피 한 잔은 되겠다.");
+        AddCrew("A", 62, 40, "아까 복도에서 이상한 소리가 들렸어.", "난방관이면 이렇게 일정한 간격으로 울릴 리가 없는데.");
+        AddCrew("E", 59, 38, "음…… 아까도 들리긴 했어.", "어디 있었냐고? 그냥…… 여기저기.");
+        AddCrew("T", 32, 40, "식사 기록은 다 남겨 뒀어.", "여섯 명 먹을 건 충분해. 나머지는 창고에서 확인하면 돼.");
+        AddCrew("C", 11, 53, "설비 점검 자료부터 확인해. 사진만 보고 원인을 단정하지 말고.", "통신실 무전기를 써. 접속 기록도 남겨.");
 
-        AddSpot("발전기 손상 사진", 9, 19, () =>
+        Inspect("침실 A 메모", 4, 27, "접힌 메모에 「점검 뒤에는 꼭 자물쇠를 확인할 것」이라고 적혀 있다.");
+        Inspect("침실 B 사물함", 37, 27, "누군가 장갑 한 짝을 걸어 뒀다. 아직 축축하다.");
+        Inspect("침실 C 침대", 56, 27, "이불을 급하게 털어 놓은 흔적. 아침에 일어난 뒤 손대지 않은 모양이다.");
+        Inspect("침실 D 교대 기록", 4, 40, "어제와 같은 시간에 교대했다. 근무표엔 이상이 없다.");
+        Inspect("식탁의 컵", 36, 40, "컵이 여섯 개 놓여 있다. 평소와 다를 것 없다.",
+            documentArt: "enamel_mugs");
+        Inspect("공동 사진", 59, 37, "우리 여섯이 휴게실에서 함께 찍은 사진이다.",
+            documentArt: "team_photo_board");
+        Inspect("복도 긁힌 자국", 24, 13, "바닥에 얕은 자국이 이어진다. 끝은 관제실 쪽이다.");
+        Inspect("교신 수신 기록", 36, 52, "최근 무전은 들어온 순서대로 여기에 남는다.",
+            "지원 요청을 보낸 뒤에도 수신 표시만 깜빡인다. 몇 문장은 잡음에 묻혔다.", true, "radio-transcript");
+        Inspect("건물 상태 기록", 5, 52, "설비 점검 기록이 잠겨 있다. 이상 보고와 권한 확인 뒤에 열 수 있다.",
+            "외부 출입 센서는 모두 닫힘이었다. 경보는 건물 내부에서 시작됐다.", true, "power_log_terminal");
+
+        AddSpot("발전 설비 손상 사진", 8, 52, InspectDamagePhoto, () => phase <= Phase.Verify);
+        AddSpot("본부 무전기", 31, 52, Radio, () => phase <= Phase.Verify);
+        AddSpot("본관동 전체 봉쇄", 9, 52, () => OpenChoices("봉쇄 제어 장치",
+            "비상 셔터를 내리고 외부 출입을 차단합니다.",
+            "전체 봉쇄 실행", LockDown, "보류", null), () => phase == Phase.Chase);
+
+        var keyRenderer = RendererAt("관제실 보조 출입 열쇠", ReportUI.Asset("Main/brass-key", 56),
+            new Vector2Int(57, 52), 3);
+        storageKey = keyRenderer.gameObject.AddComponent<Item>();
+        storageKey.gameObject.SetActive(false);
+    }
+
+    private void AddRoom(string name, int doorX, int doorY, int roomX, int roomY)
+    {
+        var hallway = new Vector2Int(doorX, doorY);
+        var threshold = new Vector2Int(roomX + 5, roomY + 6);
+        var landing = new Vector2Int(roomX + 5, roomY + 5);
+        var outLanding = hallway + (doorY == 3 ? Vector2Int.up
+            : doorY == 16 ? Vector2Int.down : Vector2Int.left);
+
+        Door enter = MakeDoor("DoorIn_" + name, landing);
+        Door leave = MakeDoor("DoorOut_" + name, outLanding);
+        AddSpot(name + " 출입문", hallway.x, hallway.y, () =>
         {
-            if (phase == Phase.Survey && conversations.Count == 5 && observations.Count >= 4)
+            enter.needKeys = name == "관제실" && phase >= Phase.Verify ? 1 : 0;
+            if (!Travel(enter, name))
             {
-                phase = Phase.Report;
-                Speak(null, "R|긁힌 방향이 하나인데 철판까지 안으로 휘었다. 공구로 이게 되나?",
-                    "T|이걸 정비 실수라고 올리기엔 손상 폭이 너무 크죠.",
-                    "C|사진을 보존하십시오. 분석실 무전기로 지원을 요청하겠습니다.");
+                Speak(null, "R|비상 잠금이 걸렸다. 창고에서 관제실 보조 열쇠를 찾아야 한다.");
+                return;
             }
-            else Speak(null, "R|금속판이 안쪽으로 휘었다. 긁힌 자국은 크고 깊다.");
-            ShowDocument("generator_damage_photo");
-        }, () => phase <= Phase.Verify);
+            if (name == "휴게실" && !loungeOpened) OpenLounge();
+        }, () => phase != Phase.Chase || name == "관제실");
+        AddSpot("복도로 나가기", threshold.x, threshold.y, () => Travel(leave, "복도"),
+            () => phase != Phase.Chase);
+    }
 
-        AddSpot("본부 무전기", 13, 19, Radio, () => phase <= Phase.Verify);
-        AddSpot("보안 단말", 15, 16, () =>
+    private Door MakeDoor(string name, Vector2Int destination)
+    {
+        var item = new GameObject(name);
+        item.transform.SetParent(transform, false);
+        var target = new GameObject("착지점");
+        target.transform.SetParent(item.transform, false);
+        target.transform.position = MainBuildingPlan.World(destination);
+        var door = item.AddComponent<Door>();
+        door.target = target.transform;
+        return door;
+    }
+
+    private bool Travel(Door door, string destination)
+    {
+        if (!door.TryUse(player.transform)) return false;
+        room = destination;
+        Follow(1);
+        ShowObjective(player.transform.position);
+        if (phase == Phase.Chase)
         {
-            if (phase == Phase.Verify) OpenChoices();
-            else Speak(null, "R|복도 CCTV 원본을 열 수 있는 보안 단말이다.");
-        }, () => phase <= Phase.Verify);
-        AddSpot("본관동 연결 통로", 1, 11, () => Speak(null, "R|셔터가 내려가 있다. 통행 승인이 필요하다."),
-            () => phase <= Phase.Verify);
-        AddSpot("발전동 연결 통로", 38, 11, () => Speak(null, "R|비상 지침이 해제되기 전에는 건널 수 없다."),
-            () => phase <= Phase.Verify);
+            enemyCrossed = false;
+            enemyDoorDelay = 1.25f;
+        }
+        return true;
+    }
 
-        AddSpot("점검용 비상구", 26, 19, EscapeLockRoom, () => phase == Phase.Chase);
-        AddSpot("외부 잠금 스위치", 24, 17, LockDown, () => phase == Phase.Chase);
+    private void OpenLounge()
+    {
+        loungeOpened = true;
+        Speak(() => OpenChoices("C", "점검표부터 확인할까?",
+                "점검표 확인", () => Speak(null, "C|관제실에 발전 설비 사진이 있어. 먼저 그걸 확인해."),
+                "대원들과 대화", null),
+            "D|늦었네 R. 오늘도 제일 마지막이야?",
+            "R|아직 교대 시간 전이야.",
+            "A|아까 복도에서 이상한 소리가 들렸어.",
+            "D|난방관 소리겠지. 여기선 매일 나잖아.",
+            "E|음…… 아까도 들리긴 했어.",
+            "R|넌 어디 있었는데?",
+            "E|그냥…… 여기저기.",
+            "C|잡담은 나중에 하고 점검표부터 확인하자.");
+    }
+
+    private void InspectDamagePhoto()
+    {
+        if (!loungeOpened)
+        {
+            Speak(null, "R|설비 점검 사진이다. 교대 전에 휴게실에서 대원들을 먼저 만나자.");
+            ShowDocument("generator_damage_photo");
+            return;
+        }
+        if (phase != Phase.Survey)
+        {
+            Speak(null, "R|외벽에 긁힌 자국이 길게 이어져 있다.");
+            ShowDocument("generator_damage_photo");
+            return;
+        }
+        phase = Phase.Report;
+        Speak(() => OpenChoices("설비 점검 사진", "사진을 확인했다. 다음으로 무엇을 할까?",
+                "사진 기록", () => Speak(null, "R|손상 위치를 남겼다. 통신실에서 본부에 보고하자."),
+                "통신실 안내", () => Speak(null, "C|통신실은 복도 동쪽이다. 무전기로 지원을 요청해.")),
+            "R|발전 설비 외벽이 긁혀 있다. 단순한 결빙 때문일까.",
+            "C|사진만으론 원인을 단정하기 어려워. 통신실에서 본부에도 보고하자.");
+        ShowDocument("generator_damage_photo");
     }
 
     private void LoadPortrait(string code)
@@ -192,14 +267,21 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         LoadPortrait(code);
         var frame = ReportUI.Sheet("Crew/" + code + "/walk-128px", 3, 4, CrewPixelsPerUnit)[0];
-        crew.Add(RendererAt(code, frame, new Vector2Int(x, y), 5));
+        var member = RendererAt(code, frame, new Vector2Int(x, y), 5);
+        crew.Add(member);
+        var talk = member.gameObject.AddComponent<Talk>();
+        talk.lines = new[]
+        {
+            new DialogueLine { speaker = code, text = first },
+            new DialogueLine { speaker = code, text = second }
+        };
         AddSpot(code + " 대화", x, y, () =>
         {
             bool firstTalk = conversations.Add(code);
-            if (firstTalk) Speak(null, code + "|" + first, code + "|" + second);
+            if (firstTalk) Speak(null, talk.lines);
             else Speak(null, code + "|" + (phase == Phase.Verify ? code switch
             {
-                "C" => "구두 보고는 보류하십시오. 전력 로그와 출입 기록을 따로 남깁니다.",
+                "C" => "무전이 끊겼어. 수신 기록과 건물 상태 기록부터 보존하자.",
                 "T" => "화면에 뜬 것만 믿긴 어렵죠. 종이 기록부터 대조해 보세요.",
                 "E" => "복도 쪽은 아직 안 봤어요? …같이 가 드릴까요.",
                 "A" => "무전 끝나고도 잡음이 좀 오래 남았어요. 듣고 있었던 것처럼요.",
@@ -221,7 +303,6 @@ public sealed class ReportStageOne : MonoBehaviour
             }
             else
             {
-                observations.Add(name);
                 Speak(null, "R|" + first);
                 if (documentArt != null) ShowDocument(documentArt);
             }
@@ -244,72 +325,75 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         if (phase != Phase.Report)
         {
-            Speak(null, phase == Phase.Verify ? "R|채널이 닫혔다. 전력 로그와 출입 기록을 맞춰 봐야겠다."
-                : "R|발전기 상태부터 확인해야 보고할 수 있겠다.");
+            Speak(null, phase == Phase.Verify ? "R|응답이 없다. 남아 있는 수신 기록을 확인하자."
+                : "R|발전 설비 사진부터 확인해야 뭐라고 보고할 수 있겠다.");
             return;
         }
-
         phase = Phase.Verify;
-        Speak(null, "본부|연구동, 수신했습니다. 손상 사진을 보존하고 외부 이동을 중단하십시오.",
-            "C|확인했습니다. 손상 범위와 현장 상태를 정리해서 전송하겠습니다.",
-            "본부|현장 상태는 단말의 점검 양식에 입력하십시오. 지원 요청은 접수됐습니다.",
-            "R|기록 보존 권한이 열렸다. 손상 사진이 찍힌 시간부터 맞춰 보자.");
+        storageKey.gameObject.SetActive(true);
+        Speak(null, "본부|기지 상태를 보고해 주십시오.",
+            "R|발전 설비에 손상 흔적이 있습니다. 현장 확인이 필요합니다.",
+            "본부|확인했습니다. 추가 자료를 전송해 주십시오.",
+            "R|통신 상태가 좋지 않습니다. 반복해 주십시오.",
+            "본부|……수신 상태 불안정……",
+            "시스템|관제실 출입 잠금. 보조 열쇠로 접근할 수 있습니다.");
     }
 
-    private void OpenChoices()
+    private void OpenChoices(string name, string text, string first, Action firstAction,
+        string second, Action secondAction)
     {
         choosing = true;
-        Present("보안 단말", "복도 CCTV 원본을 열거나 본부에 상태를 재전송할 수 있습니다.");
-        advance.text = "숫자 1 / 2 또는 버튼";
+        menuChoices.choice1 = first;
+        menuChoices.choice2 = second;
+        menuChoices.onChoice1.RemoveAllListeners();
+        menuChoices.onChoice2.RemoveAllListeners();
+        if (firstAction != null) menuChoices.onChoice1.AddListener(() => firstAction());
+        if (secondAction != null) menuChoices.onChoice2.AddListener(() => secondAction());
+        Present(name, text);
+        choiceOneLabel.text = "1 " + menuChoices.choice1;
+        choiceTwoLabel.text = "2 " + menuChoices.choice2;
+        advance.text = "";
         choices.gameObject.SetActive(true);
         choices.GetComponentInChildren<Button>().Select();
     }
 
-    private void HandleSecurityTerminal(bool openArchive)
+    private void Choose(bool first)
     {
         if (!choosing) return;
         choosing = false;
         choices.gameObject.SetActive(false);
         EventSystem.current.SetSelectedGameObject(null);
-
-        if (openArchive)
-        {
-            evidence.Add("복도 CCTV 원본");
-            Speak(CheckEvidence, "시스템|03:12 — 북쪽 복도 카메라. 영상 손상.",
-                "R|화면은 끊겼는데 소리는 남아 있다. 복도 바깥에서 나는 소리가 아니다.");
-        }
-        else
-        {
-            Speak(null, "시스템|상태 보고는 발송 대기 중입니다. 외부 통신에 응답이 없습니다.",
-                "R|기다리는 동안 단말에 남은 CCTV 원본을 열어 보자.");
-        }
+        panel.gameObject.SetActive(false);
+        hint.gameObject.SetActive(true);
+        (first ? menuChoices.onChoice1 : menuChoices.onChoice2).Invoke();
     }
 
     private void CheckEvidence()
     {
-        if (evidence.Count != 3) return;
-
+        if (evidence.Count != 2) return;
         Speak(() => StartCoroutine(TransformE()),
-            "R|03:12. 불이 꺼지고, 잠금실 문이 안에서 열렸다. CCTV에 남은 소리도 그때다.",
-            "T|셋 다 같은 시각이네요. 기록이 이상한 줄 알았는데, 정말 복도에 뭔가 있었나 봐요.",
-            "C|원본을 보존하십시오. 전원 여기 모여서 움직입니다.",
-            "A|저기… 다시 들려요. 문 뒤에서요.",
-            "E|…그 소리요? 아. 제가 너무 크게 냈나 보네요.",
-            "R|E 씨. 손에 든 거, 내려놔요.",
-            // J3, 괴담에 떨어졌어도 출근을 해야 하는구나, 272화.
-            "E|음… 그냥… 삼킬까…?");
+            "R|발전 설비가 긁히고 통신이 끊겼는데, 출입 기록에는 외부 문이 열린 적이 없다.",
+            "D|E, 지금 뭘 보고 있는 거야?",
+            "E|……응?",
+            "D|아까부터 멍하니 서 있잖아.",
+            "E|그냥…… 너희가 신기해서.",
+            "A|뭐가 신기한데?",
+            "E|다들…… 같은 걸 보고도 다르게 느끼잖아.",
+            "C|E. 지금은 장난칠 때가 아니야.",
+            "E|……장난은 아닌데.");
     }
 
     private IEnumerator TransformE()
     {
         cutscene = true;
+        room = "복도";
         player.transform.position = MainBuildingPlan.World(Entry);
         Follow(1);
         blackout.color = Color.black;
         PlayEffect("scrape");
         yield return new WaitForSeconds(.55f);
 
-        enemy.transform.position = MainBuildingPlan.World(new Vector2Int(21, 11));
+        enemy.transform.position = MainBuildingPlan.World(new Vector2Int(5, 14));
         enemy.enabled = true;
         blackout.color = new Color(.18f, 0, 0, .22f);
         foreach (Sprite frame in morphFrames)
@@ -323,18 +407,17 @@ public sealed class ReportStageOne : MonoBehaviour
         enemy.sprite = enemyFrames[0];
         blackout.color = new Color(.15f, 0, 0, .22f);
         cutscene = false;
-        Speak(BeginChase, "A|E 씨… 왜 목소리가 두 개로 들려요?",
-            "T|잠깐만요. 저게 왜 이쪽으로 오는 건데요?",
-            "C|R 씨, 복도 끝 잠금실로. 뒤돌아보지 마십시오.",
-            // J3, 괴담에 떨어졌어도 출근을 해야 하는구나, 150화.
-            "E|…살아 있었구나.",
-            "E|R 씨. 뛰면 넘어져요. …천천히 와도 되는데.");
+        Speak(BeginChase, "E|아…… 이러면 놀라겠구나.",
+            "D|뒤로 물러나!",
+            "R|여기서 나가야 해…… 아니, 관제실로 가야 해.");
     }
 
     private void BeginChase()
     {
         phase = Phase.Chase;
-        usedHatch = false;
+        room = "복도";
+        enemyCrossed = false;
+        if (inventory.keys == 0) inventory.AddKey();
         PlayerPrefs.SetInt(CheckpointKey, 1);
         PlayerPrefs.Save();
         foreach (SpriteRenderer member in crew) member.enabled = false;
@@ -349,50 +432,19 @@ public sealed class ReportStageOne : MonoBehaviour
         Follow(1);
     }
 
-    private static bool IsInLockRoom(Vector2 position)
-    {
-        Vector2Int cell = MainBuildingPlan.Cell(position);
-        return cell.x >= 26 && cell.x <= 32 && cell.y >= 15 && cell.y <= 20;
-    }
-
-    private void EscapeLockRoom()
-    {
-        if (!IsInLockRoom(player.transform.position) || !IsInLockRoom(enemy.transform.position))
-        {
-            hint.text = "E가 잠금실 안까지 들어오면 비상구를 이용하세요.";
-            return;
-        }
-
-        usedHatch = true;
-        player.transform.position = MainBuildingPlan.World(new Vector2Int(24, 18));
-        Follow(1);
-    }
-
     private void LockDown()
     {
-        if (!usedHatch || IsInLockRoom(player.transform.position) || !IsInLockRoom(enemy.transform.position))
-        {
-            hint.text = "E가 잠금실 안에 있고 R이 밖에 있어야 잠글 수 있습니다.";
-            return;
-        }
-
         phase = Phase.Finished;
         locked = true;
-        var wallTile = walls.GetTile(new Vector3Int(27, -14, 0));
-        walls.SetTile(new Vector3Int(28, -14, 0), wallTile);
-        walls.SetTile(new Vector3Int(29, -14, 0), wallTile);
         shutter.enabled = true;
         PlayEffect("shutter");
         Speak(() =>
         {
             PlayerPrefs.DeleteKey(CheckpointKey);
             PlayerPrefs.Save();
-            End("STAGE 01 종료", "잠금실 봉쇄 완료. R은 연구동 복도에서 의식을 잃었다.");
-        }, "시스템|잠금실 출입문 잠금 완료. 수동 해제 필요.",
-            "E|R 씨. 문 좀 열어 주세요.",
-            "E|잔은 치우지 마세요. …아침엔 늘 그 자리에 있었잖아요.",
-            "R|…그래. 늘 여섯이었지.",
-            "E|네. 제가 기억해요.");
+            End("STAGE 01 종료", "본관동 전체 봉쇄 완료. R은 관제실에서 의식을 잃었다.");
+        }, "시스템|비상 셔터 폐쇄. 본관동 전체 출입이 차단됐습니다.",
+            "R|여섯이서 교대하던 곳인데… 갑자기 이렇게 조용할 수가 있나.");
     }
 
     private void End(string title, string description)
@@ -438,8 +490,10 @@ public sealed class ReportStageOne : MonoBehaviour
         document.enabled = false;
         choices = ReportUI.Place(panel, "Report options", 0, 0, 1, 1);
         ReportUI.Image(choices, "Options background", .18f, .03f, .96f, .29f, Ink);
-        ReportUI.Button(choices, "1 원본 열기", .45f, .052f, .63f, .265f, new Color32(35, 65, 75, 255), Paper, () => HandleSecurityTerminal(true));
-        ReportUI.Button(choices, "2 상태 보고", .66f, .052f, .84f, .265f, new Color32(35, 65, 75, 255), Paper, () => HandleSecurityTerminal(false));
+        choiceOneLabel = ReportUI.Button(choices, "", .35f, .052f, .60f, .265f,
+            new Color32(35, 65, 75, 255), Paper, () => Choose(true)).GetComponentInChildren<Text>();
+        choiceTwoLabel = ReportUI.Button(choices, "", .64f, .052f, .89f, .265f,
+            new Color32(35, 65, 75, 255), Paper, () => Choose(false)).GetComponentInChildren<Text>();
         choices.gameObject.SetActive(false);
         panel.gameObject.SetActive(false);
         endPanel = ReportUI.Place(root, "Result", 0, 0, 1, 1);
@@ -447,6 +501,15 @@ public sealed class ReportStageOne : MonoBehaviour
     }
 
     private void Speak(Action completion, params string[] lines)
+    {
+        Speak(completion, Array.ConvertAll(lines, entry =>
+        {
+            int divider = entry.IndexOf('|');
+            return new DialogueLine { speaker = entry.Substring(0, divider), text = entry.Substring(divider + 1) };
+        }));
+    }
+
+    private void Speak(Action completion, DialogueLine[] lines)
     {
         dialogue = lines;
         afterDialogue = completion;
@@ -456,10 +519,9 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void ShowLine()
     {
-        string entry = dialogue[line];
-        int divider = entry.IndexOf('|');
-        Present(entry.Substring(0, divider), entry.Substring(divider + 1));
-        advance.text = "F / Enter";
+        DialogueLine entry = dialogue[line];
+        Present(entry.speaker, entry.text);
+        advance.text = "E / Enter";
     }
 
     private void Present(string name, string text)
@@ -515,8 +577,8 @@ public sealed class ReportStageOne : MonoBehaviour
             || (pad != null && pad.buttonSouth.wasPressedThisFrame);
         if (choosing)
         {
-            if (keys != null && (keys.digit1Key.wasPressedThisFrame || keys.numpad1Key.wasPressedThisFrame)) HandleSecurityTerminal(true);
-            else if (keys != null && (keys.digit2Key.wasPressedThisFrame || keys.numpad2Key.wasPressedThisFrame)) HandleSecurityTerminal(false);
+            if (keys != null && (keys.digit1Key.wasPressedThisFrame || keys.numpad1Key.wasPressedThisFrame)) Choose(true);
+            else if (keys != null && (keys.digit2Key.wasPressedThisFrame || keys.numpad2Key.wasPressedThisFrame)) Choose(false);
             return;
         }
         if (dialogue != null)
@@ -543,9 +605,14 @@ public sealed class ReportStageOne : MonoBehaviour
         Animate(player, playerFrames, motion, ref playerDirection);
         Follow(1 - Mathf.Exp(-9 * Time.deltaTime));
 
+        if (storageKey && storageKey.gameObject.activeSelf
+            && ((Vector2)storageKey.transform.position - position).sqrMagnitude < .45f
+            && storageKey.Collect(inventory))
+            Speak(null, "R|관제실 보조 출입 열쇠를 찾았다.");
+
         ShowObjective(position);
         FindSpot(position);
-        if (interact && nearest != null) nearest.Inspect();
+        if (dialogue == null && interact && nearest != null) nearest.Inspect();
         if (phase == Phase.Chase && dialogue == null) MoveEnemy(player.transform.position);
     }
 
@@ -593,7 +660,7 @@ public sealed class ReportStageOne : MonoBehaviour
             }
         }
 
-        hint.text = nearest != null ? $"[F]  {nearest.Name}" : "WASD / 방향키 이동   ·   F 조사 및 대화";
+        hint.text = nearest != null ? $"[E]  {nearest.Name}" : "WASD / 방향키 이동   ·   E 상호작용";
         foreach (Spot spot in spots)
             spot.Marker.enabled = spot == nearest;
     }
@@ -612,37 +679,24 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void ShowObjective(Vector2 position)
     {
-        Vector2Int cell = MainBuildingPlan.Cell(position);
-        string room = "복도";
-        if (cell.x < 6) room = "본관동 연결 통로";
-        else if (cell.x > 33) room = "발전동 연결 통로";
-        else if (cell.y < 8) room = "연구실";
-        else if (cell.y > 14) room = cell.x > 25 ? "잠금실" : "분석실";
-        heading.text = "연구동 1F  /  " + room;
+        heading.text = "본관동 1F  /  " + room;
         switch (phase)
         {
             case Phase.Survey:
-                objective.text = conversations.Count == 5 && observations.Count >= 4
-                    ? "분석실에서 발전기 손상 사진 확인"
-                    : $"대원 대화 {conversations.Count}/5   ·   주변 조사 {Mathf.Min(4, observations.Count)}/4";
+                objective.text = loungeOpened ? "관제실에서 발전 설비 사진 확인" : "휴게실에서 동료들과 만나기";
                 break;
             case Phase.Report:
-                objective.text = "분석실 무전기로 지원 요청";
+                objective.text = "동쪽 통신실에서 본부에 보고";
                 break;
             case Phase.Verify:
-                objective.text = $"전력 로그 · 복도 출입 기록 · CCTV 원본  {evidence.Count}/3";
+                objective.text = inventory.keys == 0 ? "통신실 수신 기록 확인 · 창고에서 보조 열쇠 찾기"
+                    : $"수신 기록과 관제실 상태 기록 확인  {evidence.Count}/2";
                 break;
             case Phase.Chase:
                 objective.color = new Color32(255, 160, 143, 255);
-                bool inside = IsInLockRoom(position);
-                bool enemyInside = IsInLockRoom(enemy.transform.position);
-                if (inside)
-                    objective.text = enemyInside ? "E가 들어왔습니다. 왼쪽 점검용 비상구로 탈출하세요"
-                        : "E가 문을 지나 잠금실 안으로 들어오게 하세요";
-                else if (enemyInside && usedHatch)
-                    objective.text = "복도 쪽 외부 잠금 스위치를 작동하세요";
-                else
-                    objective.text = "동쪽 잠금실로 E를 유인하세요";
+                objective.text = room == "관제실" ? "봉쇄 제어 장치에서 전체 봉쇄를 실행하세요"
+                    : "북동쪽 관제실까지 도망치세요";
+                objective.text += $"  ·  목숨 {health.life}";
                 break;
         }
     }
@@ -650,6 +704,14 @@ public sealed class ReportStageOne : MonoBehaviour
     private void MoveEnemy(Vector2 position)
     {
         float elapsed = Mathf.Min(Time.deltaTime, .035f);
+        if (room == "관제실" && !enemyCrossed)
+        {
+            enemyDoorDelay -= elapsed;
+            if (enemyDoorDelay > 0) return;
+            enemyCrossed = true;
+            enemy.transform.position = MainBuildingPlan.World(ControlEntry + Vector2Int.up);
+            enemyTarget = enemy.transform.position;
+        }
         enemyGrace -= elapsed;
         if (enemyGrace > 0) return;
         var from = (Vector2)enemy.transform.position;
@@ -685,8 +747,18 @@ public sealed class ReportStageOne : MonoBehaviour
         enemy.transform.position = next;
         enemy.color = lunging ? new Color32(255, 195, 183, 255) : Color.white;
         Animate(enemy, enemyFrames, next - from, ref enemyDirection);
-        if ((position - next).sqrMagnitude < .58f && ClearPath(next, position, true))
-            End("신호 소실", "E가 R을 따라잡았다.");
+        if ((position - next).sqrMagnitude < .58f && ClearPath(next, position, true) && health.TryTakeHit())
+        {
+            if (health.life == 0) End("신호 소실", "E가 R을 따라잡았다.");
+            else StartCoroutine(FlashDamage());
+        }
+    }
+
+    private IEnumerator FlashDamage()
+    {
+        player.color = new Color32(255, 138, 128, 255);
+        yield return new WaitForSeconds(.26f);
+        player.color = Color.white;
     }
 
     private Vector2Int ClosestEnemyCell(Vector2 position)

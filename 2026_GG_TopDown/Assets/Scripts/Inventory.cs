@@ -7,6 +7,6 @@ public class Inventory : MonoBehaviour
     public void AddKey()
     {
         keys += 1;
-        keyText.text = "열쇠 " + keys;
+        if (keyText) keyText.text = "열쇠 " + keys;
     }
 }
