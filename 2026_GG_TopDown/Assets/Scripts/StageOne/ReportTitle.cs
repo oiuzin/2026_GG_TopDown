@@ -7,14 +7,12 @@ using UnityEngine.UI;
 public sealed class ReportTitle : MonoBehaviour
 {
     [SerializeField] private Font interfaceFont;
+    [SerializeField] private SpriteRenderer editorPreview;
+
     private void Start()
     {
         AudioListener.volume = PlayerPrefs.GetFloat("ReportVolume", 1);
-        var cameraObject = new GameObject("Title Camera", typeof(Camera), typeof(AudioListener));
-        var camera = cameraObject.GetComponent<Camera>();
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = Color.black;
-        camera.cullingMask = 0;
+        editorPreview.enabled = false;
         var events = new GameObject("Event System", typeof(EventSystem), typeof(InputSystemUIInputModule));
         var screen = new ReportUI(transform, interfaceFont).Root;
         var ink = new Color32(8, 30, 39, 255);
@@ -28,12 +26,8 @@ public sealed class ReportTitle : MonoBehaviour
             ReportUI.Asset("Title/logo-red"));
         var menu = ReportUI.Place(screen, "Menu", 0, 0, 1, 1).gameObject.AddComponent<CanvasGroup>();
         var transition = gameObject.AddComponent<VhsNewGame>();
-        var start = ReportUI.Button(menu.transform, "▶ 새 게임", .411f, .36f, .589f, .416f, paper, ink, () =>
-        {
-            PlayerPrefs.DeleteKey(ReportStageOne.CheckpointKey);
-            PlayerPrefs.Save();
-            transition.StartNewGame();
-        });
+        var start = ReportUI.Button(menu.transform, "▶ 새 게임", .411f, .36f, .589f, .416f, paper, ink,
+            () => { ReportStageOne.ResetRun(); transition.StartNewGame(); });
         var resume = ReportUI.Button(menu.transform, "이어하기", .411f, .30f, .589f, .356f, paper, ink,
             transition.StartNewGame);
         resume.interactable = PlayerPrefs.HasKey(ReportStageOne.CheckpointKey);
