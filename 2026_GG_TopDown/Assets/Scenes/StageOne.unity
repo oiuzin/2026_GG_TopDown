@@ -41,17 +41,18 @@ MonoBehaviour:
   m_GameObject: {fileID: 1000}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 73634177b7474c75a9d0d89ead05f447, type: 3}
+  m_Script: {fileID: 11500000, guid: 5417529fa7cf40f894e5b6fe85625c7e, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  mapName: "스테이지 1 · 본관동 1F"
+  scenario: 1
   ground: {fileID: 2013}
   walls: {fileID: 2023}
   obstacles: {fileID: 2033}
-  mapCamera: {fileID: 4003}
+  view: {fileID: 4003}
   spriteMaterial: {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
   interfaceFont: {fileID: 12800000, guid: cdb28dba4581fa24683fb9268a0ce598, type: 3}
-  spawn: {x: 112, y: 97}
+  mapSpawn: {x: 112, y: 97}
+  pickupSprite: {fileID: 21300000, guid: d1fbb72f47574c74b7a8b60962bed74b, type: 3}
   passages:
   - label: "침실 A 들어가기"
     point: {x: 7, y: 7}

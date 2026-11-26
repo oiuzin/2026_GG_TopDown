@@ -14,8 +14,8 @@ public sealed class ReportStageOne : MonoBehaviour
 {
     [SerializeField] private Font interfaceFont;
     [SerializeField] private Material spriteMaterial;
-    public const string CheckpointKey = "AnomalyReport.StageOne.MainBuildingChase";
-    private enum Phase { Survey, Report, Verify, Chase, Finished }
+    public const string CheckpointKey = "AnomalyReport.StageOne.ProductionChase";
+    private enum Phase { Survey, Report, Verify, Chase, Evacuate, Finished }
 
     private const float CrewPixelsPerUnit = 80f;
     private static readonly Color Ink = new Color32(13, 24, 33, 250);
@@ -23,8 +23,8 @@ public sealed class ReportStageOne : MonoBehaviour
     private static readonly Color Signal = new Color32(136, 222, 226, 255);
     private static readonly Vector2Int[] Directions =
         { Vector2Int.right, Vector2Int.left, Vector2Int.up, Vector2Int.down };
-    private static readonly Vector2Int Entry = new Vector2Int(7, 14);
-    private static readonly Vector2Int EnemyEntry = new Vector2Int(4, 13);
+    private Vector2Int Entry => scenario == 1 ? new Vector2Int(8, 8) : new Vector2Int(7, 14);
+    private Vector2Int EnemyEntry => scenario == 1 ? new Vector2Int(9, 14) : new Vector2Int(4, 13);
 
     private readonly List<Spot> spots = new List<Spot>();
     private readonly List<SpriteRenderer> crew = new List<SpriteRenderer>();
@@ -65,7 +65,32 @@ public sealed class ReportStageOne : MonoBehaviour
     private bool loungeOpened;
     private bool enemyCrossed;
     private float enemyDoorDelay;
-    private static readonly Vector2Int ControlEntry = new Vector2Int(7, 54);
+    private Vector2Int ControlEntry => scenario == 1 ? new Vector2Int(30, 89) : new Vector2Int(7, 54);
+
+    [Serializable]
+    private sealed class Passage
+    {
+        public string label, scene;
+        public Vector2Int point, destination;
+    }
+
+    [SerializeField] private int scenario;
+    [SerializeField] private Tilemap obstacles;
+    [SerializeField] private Vector2Int mapSpawn;
+    [SerializeField] private Sprite pickupSprite;
+    [SerializeField] private Passage[] passages;
+    private static Vector2Int? arrival;
+    private static readonly HashSet<string> power = new HashSet<string>();
+    private bool loopStarted;
+    private int loopPasses;
+
+    public static void ResetRun()
+    {
+        PlayerPrefs.DeleteKey(CheckpointKey);
+        PlayerPrefs.Save();
+        power.Clear();
+        arrival = null;
+    }
 
     private sealed class Spot
     {
@@ -80,8 +105,9 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         AudioListener.volume = PlayerPrefs.GetFloat("ReportVolume", 1);
         effects = gameObject.AddComponent<AudioSource>();
-        foreach (BoxCollider2D obstacle in furniture)
-            if (obstacle.isActiveAndEnabled) furnitureBounds.Add(obstacle.bounds);
+        if (furniture != null)
+            foreach (BoxCollider2D obstacle in furniture)
+                if (obstacle && obstacle.isActiveAndEnabled) furnitureBounds.Add(obstacle.bounds);
         BuildInterface();
         playerFrames = ReportUI.Sheet("Crew/R/walk-128px", 3, 4, CrewPixelsPerUnit);
         enemyFrames = ReportUI.Sheet("Crew/spider", 3, 4, 43);
@@ -95,19 +121,34 @@ public sealed class ReportStageOne : MonoBehaviour
         menuChoices.onChoice2 = new UnityEvent();
         enemy = RendererAt("E 변이체", enemyFrames[0], EnemyEntry, 5);
         enemy.enabled = false;
-        SetupInteractions();
+        if (scenario == 0) SetupInteractions();
+        else
+        {
+            SetupPassages();
+            if (scenario == 1) SetupMainStory();
+            else if (scenario == 2) SetupPowerStory();
+            else SetupWhiteout();
+        }
 
         Follow(1);
 
-        if (PlayerPrefs.HasKey(CheckpointKey))
+        if (scenario <= 1 && PlayerPrefs.HasKey(CheckpointKey))
         {
             BeginChase();
             return;
         }
 
-        player.transform.position = MainBuildingPlan.World(new Vector2Int(19, 4));
+        player.transform.position = MainBuildingPlan.World(scenario == 0
+            ? new Vector2Int(19, 4) : arrival ?? mapSpawn);
+        arrival = null;
+        room = scenario == 1 ? "침실 D" : "복도";
         Follow(1);
         ShowObjective(player.transform.position);
+        if (scenario == 1)
+            Speak(null, "R|교대 시간 전이다. 출입 카드를 챙기고 식당에 가 보자.");
+        else if (scenario == 2 && !power.Contains("부품"))
+            Speak(null, "본부|발전 설비 상태를 확인하십시오.",
+                "R|전원이 내려갔다. 정비실에 교체 부품이 있는지 먼저 확인하자.");
     }
 
     private SpriteRenderer RendererAt(string name, Sprite sprite, Vector2Int cell, int order)
@@ -164,6 +205,162 @@ public sealed class ReportStageOne : MonoBehaviour
             new Vector2Int(57, 52), 3);
         storageKey = keyRenderer.gameObject.AddComponent<Item>();
         storageKey.gameObject.SetActive(false);
+    }
+
+    private void SetupPassages()
+    {
+        foreach (Passage passage in passages)
+        {
+            bool external = !string.IsNullOrEmpty(passage.scene);
+            string destination = passage.label.EndsWith(" 들어가기", StringComparison.Ordinal)
+                ? passage.label.Substring(0, passage.label.Length - " 들어가기".Length) : "복도";
+            Door door = external ? null : MakeDoor(passage.label, passage.destination);
+            AddSpot(passage.label, passage.point.x, passage.point.y, () =>
+            {
+                if (external)
+                {
+                    arrival = passage.destination;
+                    SceneManager.LoadScene(passage.scene);
+                    return;
+                }
+                door.needKeys = scenario == 1 && destination == "관제실" && phase >= Phase.Verify ? 1 : 0;
+                if (!Travel(door, destination))
+                    Speak(null, "R|관제실이 잠겼다. 침실 D의 출입 카드를 찾아야 한다.");
+                else if (scenario == 1 && destination == "식당" && !loungeOpened)
+                    OpenLounge();
+                else if (scenario == 2 && destination == "복도" && power.Contains("부품") && !power.Contains("표식")
+                    && !loopStarted)
+                {
+                    loopStarted = true;
+                    Speak(null, "R|정비실에서 나왔는데… 아까 지나온 복도가 다시 보인다.");
+                }
+            }, () => scenario == 1
+                ? (external ? phase == Phase.Evacuate :
+                    (phase != Phase.Chase || destination == "관제실"))
+                : true);
+        }
+    }
+
+    private void SetupMainStory()
+    {
+        AddCrew("D", 6, 145, "늦었네 R. 아직 커피는 따뜻해.", "여섯 명 먹을 건 충분해.");
+        AddCrew("A", 12, 145, "복도에서 무거운 걸 끄는 소리가 났어.", "난방관은 아닌 것 같아.");
+        AddCrew("T", 13, 145, "식사 기록은 다 남겼어.", "통신실 장비는 한 번 확인해 봐.");
+        AddCrew("E", 132, 45, "음… 어제 잠은 좀 잤어요?", "저는 바람 소리가 익숙해져서요.");
+        AddCrew("C", 30, 88, "설비 외벽 사진이 관제실에 도착했어.", "사진 보고 통신실에서 본부에 확인해.");
+        Inspect("침실 메모", 111, 97, "아침 교대 전에 출입 카드를 챙길 것.");
+        Inspect("식탁 위 여섯 잔", 5, 145, "오늘도 늘 앉던 자리에 잔을 여섯 개 놓았다.");
+        Inspect("공동 사진", 130, 45, "바람이 잠잠했던 날, 여섯이서 함께 찍은 사진이다.");
+        Inspect("복도의 긁힌 자국", 20, 21, "안쪽 벽에 길게 긁힌 자국이 있다.");
+        Inspect("창고 지급 명부", 143, 145, "이번 지급 기록은 본부에 확인한 뒤 다시 보자.",
+            "본부가 말한 대로 방한 장비는 다섯 세트만 지급됐다.", true);
+        Inspect("관제실 출입 기록", 35, 87, "야간 출입 기록은 무전 교신 뒤에 확인할 수 있다.",
+            "기록에는 출입 코드가 여섯 번 찍혔다. 등록표와 숫자가 다르다.", true);
+        AddSpot("발전 설비 손상 사진", 31, 88, InspectDamagePhoto, () => phase <= Phase.Report);
+        AddSpot("본부 무전기", 88, 139, Radio, () => phase <= Phase.Verify);
+        AddSpot("본관동 전체 봉쇄", 31, 88, () => OpenChoices("봉쇄 제어 장치",
+            "비상 셔터를 내려 본관동 전체를 봉쇄한다.", "전체 봉쇄 실행", LockDown, "보류", null),
+            () => phase == Phase.Chase);
+        var key = RendererAt("관제실 출입 카드", pickupSprite,
+            new Vector2Int(113, 97), 3);
+        storageKey = key.gameObject.AddComponent<Item>();
+    }
+
+    private void SetupWhiteout()
+    {
+        blackout.color = new Color(.58f, .67f, .75f, .19f);
+        Vector2Int[] lights = { new(17,9), new(19,11), new(23,14), new(27,14), new(26,16),
+            new(25,17), new(25,21), new(27,23), new(29,24) };
+        var lamp = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0,
+            Texture2D.whiteTexture.width, Texture2D.whiteTexture.height), new Vector2(.5f,.5f), 32);
+        foreach (Vector2Int cell in lights)
+        {
+            var light = RendererAt("야외 안내등", lamp, cell, 3);
+            light.color = new Color32(251, 207, 129, 235);
+            light.transform.localScale = Vector3.one * (.30f / lamp.bounds.size.x);
+        }
+        var hazeObject = ReportUI.Place(blackout.transform, "제한 시야", 0, 0, 1, 1);
+        var haze = hazeObject.gameObject.AddComponent<RawImage>();
+        haze.raycastTarget = false;
+        const int size = 64;
+        var mask = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        mask.wrapMode = TextureWrapMode.Clamp;
+        var pixels = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
+        {
+            float dx = (x - 31.5f) / 31.5f * 1.78f;
+            float dy = (y - 31.5f) / 31.5f;
+            float strength = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(.46f, .77f, Mathf.Sqrt(dx * dx + dy * dy)));
+            pixels[y * size + x] = new Color32(153, 167, 184, (byte)(strength * 252));
+        }
+        mask.SetPixels32(pixels);
+        mask.Apply(false, true);
+        haze.texture = mask;
+    }
+
+    private void SetupPowerStory()
+    {
+        blackout.color = new Color(.06f, .12f, .20f, .19f);
+        if (!power.Contains("부품"))
+        {
+            var item = RendererAt("정비 부품", pickupSprite,
+                new Vector2Int(144, 48), 3);
+            storageKey = item.gameObject.AddComponent<Item>();
+        }
+        Inspect("정비 기록", 145, 47, "작성자는 D. 그런데 작성 시각은 본관동 봉쇄 이후다.");
+        AddSpot("복도 시계", 29, 10, () => Speak(null, "R|초침이 멈췄다. 비상 안내등이 가리키는 방향만 따라가자."),
+            () => loopStarted && !power.Contains("표식"));
+        AddSpot("비상 안내등", 27, 10, () =>
+        {
+            power.Add("표식");
+            Speak(null, "R|이쪽 표시는 아까와 다르다. 안내등을 따라가니 복도가 이어진다.");
+        }, () => loopStarted && loopPasses > 0 && !power.Contains("표식"));
+        AddSpot("발전기", 74, 49, () =>
+        {
+            if (!power.Contains("부품")) { Speak(null, "R|정비실에서 교체 부품을 가져와야 한다."); return; }
+            if (!power.Contains("표식")) { Speak(null, "R|복도 안내등부터 확인해야겠다."); return; }
+            power.Add("발전기");
+            Speak(null, "R|부품을 장착했다. 발전기는 재가동 대기 상태다.");
+        }, () => true);
+        AddSpot("배전 장치", 2, 98, () =>
+        {
+            if (!power.Contains("발전기")) { Speak(null, "R|먼저 발전기에 교체 부품을 장착해야 한다."); return; }
+            OpenChoices("배전 장치", "비상 회로에 연결할 차단기를 선택한다.",
+                "비상 회로 B", () =>
+                {
+                    power.Add("배전");
+                    Speak(null, "시스템|배전 복구. 제어실에서 보조 전력을 연결하십시오.");
+                }, "주 회로 A", () => Speak(null, "시스템|과부하 감지. 비상 회로 B를 사용하십시오."));
+        }, () => true);
+        AddSpot("전력 제어 단말", 74, 97, () =>
+        {
+            if (!power.Contains("배전")) { Speak(null, "시스템|발전기 정비와 배전 복구를 먼저 완료하십시오."); return; }
+            if (!power.Contains("보조 전력"))
+            {
+                power.Add("보조 전력");
+                Speak(null, "시스템|보조 전력 연결 완료. 단말을 다시 조작해 발전기를 재가동하십시오.");
+                return;
+            }
+            OpenChoices("전력 제어 단말", "준비 완료. 발전기를 재가동할까요?",
+                "발전기 재가동", CompletePower, "보류", null);
+        }, () => true);
+    }
+
+    private void CompletePower()
+    {
+        phase = Phase.Finished;
+        locked = true;
+        blackout.color = Color.clear;
+        PlayEffect("shutter");
+        Speak(() =>
+        {
+            power.Clear();
+            End("STAGE 02 CLEAR", "발전동 전력 복구 완료. 연구동 출입 권한이 열렸다.");
+        }, "시스템|전력 공급이 정상화되었습니다.",
+            "본부|연구동으로 이동하여 탐사 기록을 확보하십시오.",
+            "D|야, R. 어디 갔냐? 다들 기다리고 있어.",
+            "R|……D?");
     }
 
     private void AddRoom(string name, int doorX, int doorY, int roomX, int roomY)
@@ -330,13 +527,14 @@ public sealed class ReportStageOne : MonoBehaviour
             return;
         }
         phase = Phase.Verify;
-        storageKey.gameObject.SetActive(true);
+        if (storageKey) storageKey.gameObject.SetActive(true);
         Speak(null, "본부|기지 상태를 보고해 주십시오.",
             "R|발전 설비에 손상 흔적이 있습니다. 현장 확인이 필요합니다.",
             "본부|확인했습니다. 추가 자료를 전송해 주십시오.",
             "R|통신 상태가 좋지 않습니다. 반복해 주십시오.",
             "본부|……수신 상태 불안정……",
-            "시스템|관제실 출입 잠금. 보조 열쇠로 접근할 수 있습니다.");
+            scenario == 1 ? "본부|확인 결과, 공식 등록 인원은 다섯 명입니다. 현장 인원을 다시 확인하십시오."
+                : "시스템|관제실 출입 잠금. 보조 열쇠로 접근할 수 있습니다.");
     }
 
     private void OpenChoices(string name, string text, string first, Action firstAction,
@@ -393,7 +591,7 @@ public sealed class ReportStageOne : MonoBehaviour
         PlayEffect("scrape");
         yield return new WaitForSeconds(.55f);
 
-        enemy.transform.position = MainBuildingPlan.World(new Vector2Int(5, 14));
+        enemy.transform.position = MainBuildingPlan.World(EnemyEntry);
         enemy.enabled = true;
         blackout.color = new Color(.18f, 0, 0, .22f);
         foreach (Sprite frame in morphFrames)
@@ -436,8 +634,15 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         phase = Phase.Finished;
         locked = true;
-        shutter.enabled = true;
+        if (shutter) shutter.enabled = true;
         PlayEffect("shutter");
+        if (scenario == 1)
+        {
+            PlayerPrefs.DeleteKey(CheckpointKey);
+            PlayerPrefs.Save();
+            StartCoroutine(RecoverAfterLockdown());
+            return;
+        }
         Speak(() =>
         {
             PlayerPrefs.DeleteKey(CheckpointKey);
@@ -445,6 +650,17 @@ public sealed class ReportStageOne : MonoBehaviour
             End("STAGE 01 종료", "본관동 전체 봉쇄 완료. R은 관제실에서 의식을 잃었다.");
         }, "시스템|비상 셔터 폐쇄. 본관동 전체 출입이 차단됐습니다.",
             "R|여섯이서 교대하던 곳인데… 갑자기 이렇게 조용할 수가 있나.");
+    }
+
+    private IEnumerator RecoverAfterLockdown()
+    {
+        blackout.color = Color.black;
+        enemy.enabled = false;
+        yield return new WaitForSeconds(1.15f);
+        blackout.color = new Color(.12f, .17f, .26f, .20f);
+        phase = Phase.Evacuate;
+        Speak(null, "시스템|본관동 전체 봉쇄 완료.",
+            "R|얼마나 기절해 있었지… 정문은 봉쇄된 상태다. 관제실 비상 해치로 나가자.");
     }
 
     private void End(string title, string description)
@@ -601,6 +817,13 @@ public sealed class ReportStageOne : MonoBehaviour
         if (Walkable(step, .24f)) position = step;
         step = position + Vector2.up * motion.y;
         if (Walkable(step, .24f)) position = step;
+        if (scenario == 2 && loopStarted && !power.Contains("표식") && room == "복도" && position.x < 24)
+        {
+            loopPasses++;
+            position = MainBuildingPlan.World(new Vector2Int(33, 10));
+            Speak(null, loopPasses == 1 ? "R|시계가 멈췄다. 비상 안내등의 표시를 다시 보자."
+                : "R|또 정비실 앞이다. 멈춘 시계 옆의 안내등을 조사하자.");
+        }
         player.transform.position = position;
         Animate(player, playerFrames, motion, ref playerDirection);
         Follow(1 - Mathf.Exp(-9 * Time.deltaTime));
@@ -608,7 +831,11 @@ public sealed class ReportStageOne : MonoBehaviour
         if (storageKey && storageKey.gameObject.activeSelf
             && ((Vector2)storageKey.transform.position - position).sqrMagnitude < .45f
             && storageKey.Collect(inventory))
-            Speak(null, "R|관제실 보조 출입 열쇠를 찾았다.");
+        {
+            if (scenario == 2) power.Add("부품");
+            Speak(null, scenario == 2 ? "R|발전기에 맞는 교체 부품을 챙겼다."
+                : scenario == 1 ? "R|관제실 출입 카드를 챙겼다." : "R|관제실 보조 출입 열쇠를 찾았다.");
+        }
 
         ShowObjective(position);
         FindSpot(position);
@@ -621,7 +848,7 @@ public sealed class ReportStageOne : MonoBehaviour
     private bool WalkableCell(Vector2Int cell)
     {
         var tile = new Vector3Int(cell.x, -cell.y, 0);
-        return ground.HasTile(tile) && !walls.HasTile(tile);
+        return ground.HasTile(tile) && (!walls || !walls.HasTile(tile)) && (!obstacles || !obstacles.HasTile(tile));
     }
 
     private bool Walkable(Vector2 center, float radius)
@@ -679,18 +906,35 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void ShowObjective(Vector2 position)
     {
+        if (scenario >= 2)
+        {
+            heading.text = scenario == 2 ? "발전동 1F  /  " + room : "야외  /  화이트아웃";
+            objective.text = scenario == 3 ? "안내등을 따라 발전동으로 이동"
+                : !power.Contains("부품") ? "정비실에서 교체 부품 찾기"
+                : !power.Contains("표식") ? "복도의 달라진 표식 확인"
+                : !power.Contains("발전기") ? "발전기실에서 부품 장착"
+                : !power.Contains("배전") ? "배전실에서 비상 회로 복구"
+                : "제어실에서 보조 전력 연결과 발전기 재가동";
+            return;
+        }
         heading.text = "본관동 1F  /  " + room;
         switch (phase)
         {
+            case Phase.Evacuate:
+                objective.color = Signal;
+                objective.text = "관제실 북동쪽 비상 해치로 나가세요";
+                break;
             case Phase.Survey:
-                objective.text = loungeOpened ? "관제실에서 발전 설비 사진 확인" : "휴게실에서 동료들과 만나기";
+                objective.text = loungeOpened ? "관제실에서 발전 설비 사진 확인" : scenario == 1 ? "식당에서 동료들과 만나기" : "휴게실에서 동료들과 만나기";
                 break;
             case Phase.Report:
                 objective.text = "동쪽 통신실에서 본부에 보고";
                 break;
             case Phase.Verify:
-                objective.text = inventory.keys == 0 ? "통신실 수신 기록 확인 · 창고에서 보조 열쇠 찾기"
-                    : $"수신 기록과 관제실 상태 기록 확인  {evidence.Count}/2";
+                objective.text = scenario == 1
+                    ? (inventory.keys == 0 ? "침실 D에서 출입 카드 챙기기" : $"창고 지급 명부와 관제실 출입 기록 확인  {evidence.Count}/2")
+                    : (inventory.keys == 0 ? "통신실 수신 기록 확인 · 창고에서 보조 열쇠 찾기"
+                       : $"수신 기록과 관제실 상태 기록 확인  {evidence.Count}/2");
                 break;
             case Phase.Chase:
                 objective.color = new Color32(255, 160, 143, 255);
@@ -709,7 +953,7 @@ public sealed class ReportStageOne : MonoBehaviour
             enemyDoorDelay -= elapsed;
             if (enemyDoorDelay > 0) return;
             enemyCrossed = true;
-            enemy.transform.position = MainBuildingPlan.World(ControlEntry + Vector2Int.up);
+            enemy.transform.position = MainBuildingPlan.World(scenario == 1 ? ControlEntry : ControlEntry + Vector2Int.up);
             enemyTarget = enemy.transform.position;
         }
         enemyGrace -= elapsed;
