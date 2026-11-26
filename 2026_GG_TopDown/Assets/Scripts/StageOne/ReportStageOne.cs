@@ -15,7 +15,7 @@ public sealed class ReportStageOne : MonoBehaviour
     [SerializeField] private Font interfaceFont;
     [SerializeField] private Material spriteMaterial;
     public const string CheckpointKey = "AnomalyReport.StageOne.ProductionChase";
-    private enum Phase { Survey, Report, Verify, Chase, Evacuate, Finished }
+    private enum Phase { Survey, Report, Verify, Blackout, Chase, Evacuate, Finished }
 
     private const float CrewPixelsPerUnit = 80f;
     private static readonly Color Ink = new Color32(13, 24, 33, 250);
@@ -134,7 +134,10 @@ public sealed class ReportStageOne : MonoBehaviour
 
         if (scenario <= 1 && PlayerPrefs.HasKey(CheckpointKey))
         {
-            BeginChase();
+            if (scenario == 1 && PlayerPrefs.GetInt(CheckpointKey) == 2)
+                ResumeAfterLockdown();
+            else
+                BeginChase();
             return;
         }
 
@@ -228,6 +231,8 @@ public sealed class ReportStageOne : MonoBehaviour
                     Speak(null, "R|관제실이 잠겼다. 침실 D의 출입 카드를 찾아야 한다.");
                 else if (scenario == 1 && destination == "식당" && !loungeOpened)
                     OpenLounge();
+                else if (scenario == 1 && phase == Phase.Blackout && destination == "복도")
+                    RevealE();
                 else if (scenario == 2 && destination == "복도" && power.Contains("부품") && !power.Contains("표식")
                     && !loopStarted)
                 {
@@ -256,6 +261,7 @@ public sealed class ReportStageOne : MonoBehaviour
             "본부가 말한 대로 방한 장비는 다섯 세트만 지급됐다.", true);
         Inspect("관제실 출입 기록", 35, 87, "야간 출입 기록은 무전 교신 뒤에 확인할 수 있다.",
             "기록에는 출입 코드가 여섯 번 찍혔다. 등록표와 숫자가 다르다.", true);
+        AddSpot("탐사대 등록 명부", 25, 189, InspectRoster, () => phase == Phase.Verify);
         AddSpot("발전 설비 손상 사진", 31, 88, InspectDamagePhoto, () => phase <= Phase.Report);
         AddSpot("본부 무전기", 88, 139, Radio, () => phase <= Phase.Verify);
         AddSpot("본관동 전체 봉쇄", 31, 88, () => OpenChoices("봉쇄 제어 장치",
@@ -349,6 +355,8 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void CompletePower()
     {
+        PlayerPrefs.DeleteKey(CheckpointKey);
+        PlayerPrefs.Save();
         phase = Phase.Finished;
         locked = true;
         blackout.color = Color.clear;
@@ -416,6 +424,24 @@ public sealed class ReportStageOne : MonoBehaviour
     private void OpenLounge()
     {
         loungeOpened = true;
+        if (scenario == 1)
+        {
+            Vector3 ePosition = crew[3].transform.position;
+            Vector3 cPosition = crew[4].transform.position;
+            crew[3].transform.position = MainBuildingPlan.World(new Vector2Int(7, 146));
+            crew[4].transform.position = MainBuildingPlan.World(new Vector2Int(10, 147));
+            Speak(() =>
+            {
+                crew[3].transform.position = ePosition;
+                crew[4].transform.position = cPosition;
+            }, "D|늦었네. 네 잔은 늘 두던 자리에 뒀어.",
+                "R|아직 교대 시간 전이야.",
+                "A|새벽에 복도에서 뭔가 끄는 소리 들었어?",
+                "T|바람이었다면 창문부터 흔들렸겠죠.",
+                "E|음… 그 소리, 식당 앞에서 멈췄어요.",
+                "C|교대 전에 관제실 사진부터 보자. 외벽에 자국이 찍혔어.");
+            return;
+        }
         Speak(() => OpenChoices("C", "점검표부터 확인할까?",
                 "점검표 확인", () => Speak(null, "C|관제실에 발전 설비 사진이 있어. 먼저 그걸 확인해."),
                 "대원들과 대화", null),
@@ -433,7 +459,7 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         if (!loungeOpened)
         {
-            Speak(null, "R|설비 점검 사진이다. 교대 전에 휴게실에서 대원들을 먼저 만나자.");
+            Speak(null, "R|설비 점검 사진이다. 교대 전에 대원들을 먼저 만나자.");
             ShowDocument("generator_damage_photo");
             return;
         }
@@ -475,10 +501,10 @@ public sealed class ReportStageOne : MonoBehaviour
         AddSpot(code + " 대화", x, y, () =>
         {
             bool firstTalk = conversations.Add(code);
-            if (firstTalk) Speak(null, talk.lines);
+            if (firstTalk && phase != Phase.Verify) Speak(null, talk.lines);
             else Speak(null, code + "|" + (phase == Phase.Verify ? code switch
             {
-                "C" => "무전이 끊겼어. 수신 기록과 건물 상태 기록부터 보존하자.",
+                "C" => "여기 있는 기록부터 대조해. 숫자가 어디서 달라졌는지 확인하자.",
                 "T" => "화면에 뜬 것만 믿긴 어렵죠. 종이 기록부터 대조해 보세요.",
                 "E" => "복도 쪽은 아직 안 봤어요? …같이 가 드릴까요.",
                 "A" => "무전 끝나고도 잡음이 좀 오래 남았어요. 듣고 있었던 것처럼요.",
@@ -522,19 +548,28 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         if (phase != Phase.Report)
         {
-            Speak(null, phase == Phase.Verify ? "R|응답이 없다. 남아 있는 수신 기록을 확인하자."
+            Speak(null, phase == Phase.Verify ? "R|응답이 없다. 기지에 남은 기록을 대조해 보자."
                 : "R|발전 설비 사진부터 확인해야 뭐라고 보고할 수 있겠다.");
             return;
         }
         phase = Phase.Verify;
+        if (scenario == 1)
+        {
+            Speak(null, "본부|발전 설비 사진 수신했습니다. 현장 인원 다섯 명, 맞습니까?",
+                "R|저를 포함하면 여섯 명입니다.",
+                "본부|다시 확인했습니다. 공식 등록 인원은 다섯 명입니다.",
+                "R|등록 명단을 읽어 주시겠습니까?",
+                "무전기|……치직……",
+                "R|본부? 응답 바랍니다. …기록실에 보관된 원본을 확인하자.");
+            return;
+        }
         if (storageKey) storageKey.gameObject.SetActive(true);
         Speak(null, "본부|기지 상태를 보고해 주십시오.",
             "R|발전 설비에 손상 흔적이 있습니다. 현장 확인이 필요합니다.",
             "본부|확인했습니다. 추가 자료를 전송해 주십시오.",
             "R|통신 상태가 좋지 않습니다. 반복해 주십시오.",
             "본부|……수신 상태 불안정……",
-            scenario == 1 ? "본부|확인 결과, 공식 등록 인원은 다섯 명입니다. 현장 인원을 다시 확인하십시오."
-                : "시스템|관제실 출입 잠금. 보조 열쇠로 접근할 수 있습니다.");
+            "시스템|관제실 출입 잠금. 보조 열쇠로 접근할 수 있습니다.");
     }
 
     private void OpenChoices(string name, string text, string first, Action firstAction,
@@ -566,8 +601,42 @@ public sealed class ReportStageOne : MonoBehaviour
         (first ? menuChoices.onChoice1 : menuChoices.onChoice2).Invoke();
     }
 
+    private void InspectRoster()
+    {
+        const string roster = "탐사대 등록 명부";
+        if (evidence.Contains(roster))
+        {
+            Speak(null, "R|등록 명단은 R, C, A, T, D. E의 이름이 없다.");
+            return;
+        }
+
+        void RecordRoster(params string[] lines)
+        {
+            evidence.Add(roster);
+            Speak(CheckEvidence, lines);
+        }
+
+        Speak(() => OpenChoices(roster, "E의 이름이 없다. 누구에게 이 사실을 말할까?",
+                "C에게 알리기", () => RecordRoster("R|C, 명부에 E가 없어.",
+                    "C|…그 이름을 언제 처음 들었는지 기억나?"),
+                "E에게 묻기", () => RecordRoster("R|E, 네 이름이 명부에 없어. 언제 합류했지?",
+                    "E|음… 제가 나중에 왔나요? 계속 같이 있었던 것 같은데.")),
+            "명부|탐사대 등록 인원 5명. R, C, A, T, D.",
+            "R|출력된 날짜는 출발 전이다. 왜 E의 이름이 없지?");
+    }
+
     private void CheckEvidence()
     {
+        if (scenario == 1)
+        {
+            if (evidence.Count == 3)
+            {
+                phase = Phase.Blackout;
+                Speak(null, "R|등록은 다섯 명. 출입 기록은 여섯 번.",
+                    "R|…복도에 있던 소리가 멎었다.");
+            }
+            return;
+        }
         if (evidence.Count != 2) return;
         Speak(() => StartCoroutine(TransformE()),
             "R|발전 설비가 긁히고 통신이 끊겼는데, 출입 기록에는 외부 문이 열린 적이 없다.",
@@ -579,6 +648,17 @@ public sealed class ReportStageOne : MonoBehaviour
             "E|다들…… 같은 걸 보고도 다르게 느끼잖아.",
             "C|E. 지금은 장난칠 때가 아니야.",
             "E|……장난은 아닌데.");
+    }
+
+    private void RevealE()
+    {
+        blackout.color = new Color(.04f, .02f, .04f, .65f);
+        PlayEffect("scrape");
+        Speak(() => StartCoroutine(TransformE()),
+            "D|E, 거기서 뭐 해? 불이 나갔어.",
+            "E|음… 이름이 없으면, 내가 앉던 자리도 없어지는 거예요?",
+            "R|E. 거기서 움직이지 마.",
+            "E|왜요? 아까까지는 옆에 있어도 괜찮았잖아요.");
     }
 
     private IEnumerator TransformE()
@@ -638,9 +718,12 @@ public sealed class ReportStageOne : MonoBehaviour
         PlayEffect("shutter");
         if (scenario == 1)
         {
-            PlayerPrefs.DeleteKey(CheckpointKey);
+            PlayerPrefs.SetInt(CheckpointKey, 2);
             PlayerPrefs.Save();
-            StartCoroutine(RecoverAfterLockdown());
+            enemy.enabled = false;
+            Speak(() => StartCoroutine(RecoverAfterLockdown()),
+                "시스템|비상 셔터 폐쇄. 본관동 전체 봉쇄 완료.",
+                "E|R… 문 좀 열어 줘요. 여기, 너무 추워요.");
             return;
         }
         Speak(() =>
@@ -656,11 +739,28 @@ public sealed class ReportStageOne : MonoBehaviour
     {
         blackout.color = Color.black;
         enemy.enabled = false;
-        yield return new WaitForSeconds(1.15f);
-        blackout.color = new Color(.12f, .17f, .26f, .20f);
+        hud.gameObject.SetActive(false);
+        var clear = ReportUI.Label(blackout.transform, "STAGE 01 CLEAR", .12f, .42f, .88f, .58f, 70, Signal);
+        yield return new WaitForSeconds(1.75f);
+        clear.gameObject.SetActive(false);
+        Destroy(clear.gameObject);
+        hud.gameObject.SetActive(true);
+        ResumeAfterLockdown();
+        Speak(null, "R|…얼마나 기절해 있었지?",
+            "R|정문은 아직 막혀 있다. 관제실 비상 해치로 나가자.");
+    }
+
+    private void ResumeAfterLockdown()
+    {
         phase = Phase.Evacuate;
-        Speak(null, "시스템|본관동 전체 봉쇄 완료.",
-            "R|얼마나 기절해 있었지… 정문은 봉쇄된 상태다. 관제실 비상 해치로 나가자.");
+        room = "관제실";
+        if (inventory.keys == 0) inventory.AddKey();
+        if (shutter) shutter.enabled = true;
+        foreach (SpriteRenderer member in crew) member.enabled = false;
+        enemy.enabled = false;
+        player.transform.position = MainBuildingPlan.World(ControlEntry);
+        blackout.color = new Color(.12f, .17f, .26f, .20f);
+        Follow(1);
     }
 
     private void End(string title, string description)
@@ -932,9 +1032,12 @@ public sealed class ReportStageOne : MonoBehaviour
                 break;
             case Phase.Verify:
                 objective.text = scenario == 1
-                    ? (inventory.keys == 0 ? "침실 D에서 출입 카드 챙기기" : $"창고 지급 명부와 관제실 출입 기록 확인  {evidence.Count}/2")
+                    ? (inventory.keys == 0 ? "침실 D에서 출입 카드 챙기기" : $"기록실 명부 · 창고 지급표 · 관제실 출입 기록  {evidence.Count}/3")
                     : (inventory.keys == 0 ? "통신실 수신 기록 확인 · 창고에서 보조 열쇠 찾기"
                        : $"수신 기록과 관제실 상태 기록 확인  {evidence.Count}/2");
+                break;
+            case Phase.Blackout:
+                objective.text = "방에서 나와 복도 확인";
                 break;
             case Phase.Chase:
                 objective.color = new Color32(255, 160, 143, 255);
