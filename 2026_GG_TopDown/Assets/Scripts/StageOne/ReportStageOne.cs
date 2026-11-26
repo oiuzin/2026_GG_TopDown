@@ -48,11 +48,13 @@ public sealed class ReportStageOne : MonoBehaviour
     [SerializeField] private BoxCollider2D[] furniture;
     private readonly List<Bounds> furnitureBounds = new List<Bounds>();
     private AudioSource effects;
+    [SerializeField] private SpriteRenderer scenePlayer, sceneEnemy;
+    [SerializeField] private SpriteRenderer sceneD, sceneA, sceneT, sceneE, sceneC;
     private SpriteRenderer player, enemy;
     private Sprite[] playerFrames, enemyFrames, morphFrames;
     [SerializeField] private Camera view;
     private Spot nearest;
-    private Vector2 enemyTarget;
+    private Vector2 enemySpawn, enemyTarget;
     private int playerDirection, enemyDirection;
     private float enemyGrace, lungeCooldown, lungeWindup, lungeRemaining;
     private bool locked;
@@ -113,13 +115,14 @@ public sealed class ReportStageOne : MonoBehaviour
         enemyFrames = ReportUI.Sheet("Crew/spider", 3, 4, 43);
         morphFrames = ReportUI.Sheet("Crew/morph", 4, 2, 60);
         LoadPortrait("R");
-        player = RendererAt("R", playerFrames[0], Entry, 5);
+        player = scenePlayer ? scenePlayer : RendererAt("R", playerFrames[0], Entry, 5);
         inventory = player.gameObject.AddComponent<Inventory>();
         health = player.gameObject.AddComponent<PlayerHealth>();
         menuChoices = gameObject.AddComponent<Talk>();
         menuChoices.onChoice1 = new UnityEvent();
         menuChoices.onChoice2 = new UnityEvent();
-        enemy = RendererAt("E 변이체", enemyFrames[0], EnemyEntry, 5);
+        enemy = sceneEnemy ? sceneEnemy : RendererAt("E 변이체", enemyFrames[0], EnemyEntry, 5);
+        enemySpawn = enemy.transform.position;
         enemy.enabled = false;
         if (scenario == 0) SetupInteractions();
         else
@@ -141,8 +144,9 @@ public sealed class ReportStageOne : MonoBehaviour
             return;
         }
 
-        player.transform.position = MainBuildingPlan.World(scenario == 0
-            ? new Vector2Int(19, 4) : arrival ?? mapSpawn);
+        if (arrival.HasValue || !scenePlayer)
+            player.transform.position = MainBuildingPlan.World(scenario == 0
+                ? new Vector2Int(19, 4) : arrival ?? mapSpawn);
         arrival = null;
         room = scenario == 1 ? "침실 D" : "복도";
         Follow(1);
@@ -248,11 +252,11 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void SetupMainStory()
     {
-        AddCrew("D", 6, 145, "늦었네 R. 아직 커피는 따뜻해.", "여섯 명 먹을 건 충분해.");
-        AddCrew("A", 12, 145, "복도에서 무거운 걸 끄는 소리가 났어.", "난방관은 아닌 것 같아.");
-        AddCrew("T", 13, 145, "식사 기록은 다 남겼어.", "통신실 장비는 한 번 확인해 봐.");
-        AddCrew("E", 132, 45, "음… 어제 잠은 좀 잤어요?", "저는 바람 소리가 익숙해져서요.");
-        AddCrew("C", 30, 88, "설비 외벽 사진이 관제실에 도착했어.", "사진 보고 통신실에서 본부에 확인해.");
+        AddCrew("D", 6, 145, "늦었네 R. 아직 커피는 따뜻해.", "여섯 명 먹을 건 충분해.", sceneD);
+        AddCrew("A", 12, 145, "복도에서 무거운 걸 끄는 소리가 났어.", "난방관은 아닌 것 같아.", sceneA);
+        AddCrew("T", 13, 145, "식사 기록은 다 남겼어.", "통신실 장비는 한 번 확인해 봐.", sceneT);
+        AddCrew("E", 132, 45, "음… 어제 잠은 좀 잤어요?", "저는 바람 소리가 익숙해져서요.", sceneE);
+        AddCrew("C", 30, 88, "설비 외벽 사진이 관제실에 도착했어.", "사진 보고 통신실에서 본부에 확인해.", sceneC);
         Inspect("침실 메모", 111, 97, "아침 교대 전에 출입 카드를 챙길 것.");
         Inspect("식탁 위 여섯 잔", 5, 145, "오늘도 늘 앉던 자리에 잔을 여섯 개 놓았다.");
         Inspect("공동 사진", 130, 45, "바람이 잠잠했던 날, 여섯이서 함께 찍은 사진이다.");
@@ -486,11 +490,14 @@ public sealed class ReportStageOne : MonoBehaviour
         portraits.Add(code, Sprite.Create(texture, visible, new Vector2(.5f, .5f)));
     }
 
-    private void AddCrew(string code, int x, int y, string first, string second)
+    private void AddCrew(string code, int x, int y, string first, string second, SpriteRenderer member = null)
     {
         LoadPortrait(code);
-        var frame = ReportUI.Sheet("Crew/" + code + "/walk-128px", 3, 4, CrewPixelsPerUnit)[0];
-        var member = RendererAt(code, frame, new Vector2Int(x, y), 5);
+        if (!member)
+        {
+            var frame = ReportUI.Sheet("Crew/" + code + "/walk-128px", 3, 4, CrewPixelsPerUnit)[0];
+            member = RendererAt(code, frame, new Vector2Int(x, y), 5);
+        }
         crew.Add(member);
         var talk = member.gameObject.AddComponent<Talk>();
         talk.lines = new[]
@@ -498,7 +505,7 @@ public sealed class ReportStageOne : MonoBehaviour
             new DialogueLine { speaker = code, text = first },
             new DialogueLine { speaker = code, text = second }
         };
-        AddSpot(code + " 대화", x, y, () =>
+        AddSpot(code + " 대화", member.transform.position, () =>
         {
             bool firstTalk = conversations.Add(code);
             if (firstTalk && phase != Phase.Verify) Speak(null, talk.lines);
@@ -534,13 +541,18 @@ public sealed class ReportStageOne : MonoBehaviour
 
     private void AddSpot(string name, int x, int y, Action action, Func<bool> available)
     {
-        var marker = RendererAt(name + " 표시", null, new Vector2Int(x, y), 8);
+        AddSpot(name, MainBuildingPlan.World(new Vector2Int(x, y)), action, available);
+    }
+
+    private void AddSpot(string name, Vector2 position, Action action, Func<bool> available)
+    {
+        var marker = RendererAt(name + " 표시", null, MainBuildingPlan.Cell(position), 8);
         marker.sprite = ReportUI.Asset("Main/hazard_stripe", 96);
         marker.color = Signal;
         marker.transform.localScale = new Vector3(1.15f, .45f, 1);
-        marker.transform.position += Vector3.up * .88f;
+        marker.transform.position = (Vector3)position + Vector3.up * .88f;
         marker.enabled = false;
-        spots.Add(new Spot { Position = MainBuildingPlan.World(new Vector2Int(x, y)),
+        spots.Add(new Spot { Position = position,
             Name = name, Inspect = action, Available = available, Marker = marker });
     }
 
@@ -671,7 +683,7 @@ public sealed class ReportStageOne : MonoBehaviour
         PlayEffect("scrape");
         yield return new WaitForSeconds(.55f);
 
-        enemy.transform.position = MainBuildingPlan.World(EnemyEntry);
+        enemy.transform.position = enemySpawn;
         enemy.enabled = true;
         blackout.color = new Color(.18f, 0, 0, .22f);
         foreach (Sprite frame in morphFrames)
@@ -700,7 +712,7 @@ public sealed class ReportStageOne : MonoBehaviour
         PlayerPrefs.Save();
         foreach (SpriteRenderer member in crew) member.enabled = false;
         player.transform.position = MainBuildingPlan.World(Entry);
-        enemy.transform.position = MainBuildingPlan.World(EnemyEntry);
+        enemy.transform.position = enemySpawn;
         enemyTarget = enemy.transform.position;
         enemy.enabled = true;
         enemyGrace = .85f;
