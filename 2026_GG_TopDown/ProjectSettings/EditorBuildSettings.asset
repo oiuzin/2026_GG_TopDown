@@ -8,24 +8,15 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/ReportTitle.unity
     guid: 6bdabf6de53f4945adc8f481c29bdcbe
-  - enabled: 1
-    path: Assets/Scenes/StageOne.unity
-    guid: f31f2f2f682d48dc9794f70311241994
   - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 8c9cfa26abfee488c85f1582747f6a02
   - enabled: 1
-    path: Assets/Scenes/ArcticMaps/Stage1_MainMap.unity
+    path: Assets/Scenes/StageOne.unity
     guid: 75bbca1200144976b9f6269fba4afb2f
   - enabled: 1
     path: Assets/Scenes/ArcticMaps/Stage2_PowerMap.unity
     guid: 5718210f82d34d8a9c6beeced5d8252f
-  - enabled: 1
-    path: Assets/Scenes/ArcticMaps/Stage3_ResearchMap.unity
-    guid: 9df09f7467fa4a79a436d34441ec549b
-  - enabled: 1
-    path: Assets/Scenes/ArcticMaps/Stage3_BasementMap.unity
-    guid: c8e7de853eda48408b79352727cb63c4
   - enabled: 1
     path: Assets/Scenes/ArcticMaps/ArcticOutdoorMap.unity
     guid: 09e55255d7ae41e0b62604ae670ee09e

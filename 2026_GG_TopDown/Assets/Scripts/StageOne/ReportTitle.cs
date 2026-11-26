@@ -26,16 +26,12 @@ public sealed class ReportTitle : MonoBehaviour
             ReportUI.Asset("Title/logo-red"));
         var menu = ReportUI.Place(screen, "Menu", 0, 0, 1, 1).gameObject.AddComponent<CanvasGroup>();
         var transition = gameObject.AddComponent<VhsNewGame>();
-        var start = ReportUI.Button(menu.transform, "▶ 새 게임", .411f, .36f, .589f, .416f, paper, ink, () =>
-        {
-            PlayerPrefs.DeleteKey(ReportStageOne.CheckpointKey);
-            PlayerPrefs.Save();
-            transition.StartNewGame();
-        });
+        var start = ReportUI.Button(menu.transform, "▶ 새 게임", .411f, .36f, .589f, .416f, paper, ink,
+            transition.StartNewGame);
         var resume = ReportUI.Button(menu.transform, "이어하기", .411f, .30f, .589f, .356f, paper, ink,
             transition.StartNewGame);
-        resume.interactable = PlayerPrefs.HasKey(ReportStageOne.CheckpointKey);
-        if (!resume.interactable) resume.GetComponentInChildren<Text>().color = new Color32(70, 98, 105, 255);
+        resume.interactable = false;
+        resume.GetComponentInChildren<Text>().color = new Color32(70, 98, 105, 255);
         var settings = ReportUI.Place(screen, "Settings", 0, 0, 1, 1);
         var settingsButton = ReportUI.Button(menu.transform, "설정", .411f, .24f, .589f, .296f, paper, ink, () =>
         {

@@ -56,15 +56,11 @@ MonoBehaviour:
   - label: "본관동 1F 출입구"
     point: {x: 10, y: 12}
     destination: {x: 20, y: 21}
-    scene: "Stage1_MainMap"
+    scene: "StageOne"
   - label: "발전동 1F 출입구"
     point: {x: 30, y: 23}
     destination: {x: 9, y: 16}
     scene: "Stage2_PowerMap"
-  - label: "연구동 1F 출입구"
-    point: {x: 21, y: 9}
-    destination: {x: 72, y: 101}
-    scene: "Stage3_ResearchMap"
 --- !u!1 &2000
 GameObject:
   m_ObjectHideFlags: 0
