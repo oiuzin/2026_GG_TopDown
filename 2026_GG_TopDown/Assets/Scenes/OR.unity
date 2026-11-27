@@ -157,7 +157,31 @@ MonoBehaviour:
   attack: 2
   onWin:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1814123980}
+        m_TargetAssemblyTypeName: Talk, Assembly-CSharp
+        m_MethodName: Say
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 921980399}
+        m_TargetAssemblyTypeName: PlayerStats, Assembly-CSharp
+        m_MethodName: AddAttack
+        m_Mode: 3
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 1
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   screen: {fileID: 1522584894}
 --- !u!58 &63087305
 CircleCollider2D:
@@ -266,7 +290,8 @@ Transform:
   m_LocalPosition: {x: -7.59, y: 6.29, z: 0}
   m_LocalScale: {x: 0.726, y: 0.726, z: 0.726}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1814123981}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &159136215
@@ -14261,6 +14286,7 @@ GameObject:
   - component: {fileID: 1083289703}
   - component: {fileID: 1083289702}
   - component: {fileID: 1083289701}
+  - component: {fileID: 1083289704}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Enemy
@@ -14438,6 +14464,20 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 4
+--- !u!114 &1083289704
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1083289698}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2746f777f7d1584a9741f700f52c9b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TouchDamage
+  damage: 1
+  playerStats: {fileID: 921980399}
 --- !u!1 &1126072469
 GameObject:
   m_ObjectHideFlags: 0
@@ -21888,6 +21928,69 @@ SpriteRenderer:
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+--- !u!1 &1814123979
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1814123981}
+  - component: {fileID: 1814123980}
+  m_Layer: 5
+  m_Name: Win_Theif
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1814123980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1814123979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dce2945c410dfd143b96f763c39c6e9a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Talk
+  lines:
+  - speaker: 
+    text: "\uB3C4\uC801\uC744 \uBB3C\uB9AC\uCCE4\uB2E4. \uACF5\uACA9\uB825\uC774
+      1 \uC62C\uB790\uB2E4."
+    portrait: {fileID: 0}
+  choice1: 
+  choice2: 
+  onChoice1:
+    m_PersistentCalls:
+      m_Calls: []
+  onChoice2:
+    m_PersistentCalls:
+      m_Calls: []
+  prompt: {fileID: 0}
+  dialogueBox: {fileID: 1522584893}
+--- !u!224 &1814123981
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1814123979}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.81712013, y: 0.81712013, z: 0.81712013}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 63087307}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 1332.7686, y: 865.5261}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1863920697
 GameObject:
   m_ObjectHideFlags: 0

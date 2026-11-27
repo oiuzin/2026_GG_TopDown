@@ -13,17 +13,16 @@ public class PlayerHealth : MonoBehaviour
     }
     void OnCollisionStay2D(Collision2D collision)
     {
-        bool isEnemy = collision.gameObject.CompareTag("Enemy");
-        if (isEnemy && safeTimer <= 0f)
-        {
-            life -= 1;
-            safeTimer = safeTime;
-            lifeText.text = "목숨 " + life;
-            if (life <= 0)
-            {
-                string scene = SceneManager.GetActiveScene().name;
-                SceneManager.LoadScene(scene);
-            }
-        }
+        if (collision.gameObject.CompareTag("Enemy") && TryTakeHit() && life == 0)
+            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    public bool TryTakeHit()
+    {
+        if (safeTimer > 0 || life <= 0) return false;
+        life--;
+        safeTimer = safeTime;
+        if (lifeText) lifeText.text = "목숨 " + life;
+        return true;
     }
 }

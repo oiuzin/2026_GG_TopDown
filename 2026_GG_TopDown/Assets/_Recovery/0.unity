@@ -165,6 +165,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   interfaceFont: {fileID: 12800000, guid: cdb28dba4581fa24683fb9268a0ce598, type: 3}
   spriteMaterial: {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  ground: {fileID: 0}
+  walls: {fileID: 0}
+  shutter: {fileID: 0}
+  furniture: []
+  view: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

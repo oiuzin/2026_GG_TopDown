@@ -12,7 +12,7 @@ EditorBuildSettings:
     path: Assets/Scenes/ReportTitle.unity
     guid: 6bdabf6de53f4945adc8f481c29bdcbe
   - enabled: 1
-    path: Assets/Scenes/StageOne.unity
+    path: Assets/Scenes/Prototype/StageOnePrototype.unity
     guid: f31f2f2f682d48dc9794f70311241994
   - enabled: 1
     path: Assets/Scenes/OR.unity

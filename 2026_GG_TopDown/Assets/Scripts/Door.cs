@@ -26,11 +26,15 @@ public class Door : MonoBehaviour
     }
     public void Use()
     {
-        Inventory inventory = player.GetComponent<Inventory>();
-        if (inventory.keys >= needKeys)
-        {
-            player.position = target.position;
-        }
-        else { lockedTalk.Say(); }
+        if (!TryUse(player)) lockedTalk.Say();
+    }
+
+    public bool TryUse(Transform visitor)
+    {
+        if (!visitor || !target) return false;
+        var inventory = visitor.GetComponent<Inventory>();
+        if (needKeys > 0 && (!inventory || inventory.keys < needKeys)) return false;
+        visitor.position = target.position;
+        return true;
     }
 }
